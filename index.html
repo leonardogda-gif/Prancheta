@@ -821,7 +821,7 @@ function news(text,tids=[]){if(S._nb)S._nb.push({text,tids});S.news.unshift({s:S
 
 function gate(t,mult=1,att=null){
   if(att==null)att=attendance(t);const rev=att*t.price*mult;
-  credit(t,'gate',rev);t.lastGate=att;t.lastRev=rev;return {att,rev}}
+  credit(t,'gate',rev);t.lastGate=att;t.lastRev=rev;if(isHuman(t.id)){(t.attH=t.attH||[]).push(Math.round(att/Math.max(1,capOf(t))*100));if(t.attH.length>6)t.attH.shift()}return {att,rev}}
 function credit(t,k,v){if(isHuman(t.id)){if(v>0&&k!=='loan')v=Math.round(v*dff().inc);else if(k==='wages')v=Math.round(v*dff().wage)}t.cash+=v;t.led=t.led||{};t.led[k]=(t.led[k]||0)+v;book(t,k,v);if(v>0&&(k==='gate'||k.startsWith('tv')))withhold(t,k,v)}
 function takeCash(t,k,w){t.cash-=w;t.led=t.led||{};t.led[k]=(t.led[k]||0)-w;book(t,k,-w)}
 function book(t,k,v){if(!v||!isHuman(t.id))return;t.sled=t.sled||{};t.sled[k]=(t.sled[k]||0)+v}
@@ -2013,6 +2013,12 @@ function renderClube(){
    ${(UI.cv||'fin')!=='est'?'':fold('est','Estádio',`<b>${t.cap.toLocaleString('pt-BR')} lugares</b>`,`<span class="muted" style="font-size:13px">${esc(t.stadium)} · ingresso R$ ${t.price}</span>`,`
      <div class="spread"><div><span class="label">Último público</span><div style="font:800 24px var(--display)" class="num">${t.lastGate?t.lastGate.toLocaleString('pt-BR'):'—'}</div></div>
        ${t.cap>=80000?note('Capacidade máxima: 80 mil lugares.'):t.stWork?note(`Obra de ampliação: faltam ${t.stWork.left} datas. 1.500 lugares fechados.`):`<button class="btn" data-act="expand" ${t.cash<seatCost(t)?'disabled':''}>Ampliar +2.000 · ${money(seatCost(t))} · 8 datas</button>`}</div>
+     ${(()=>{const h=t.attH||[];const avg=h.length?Math.round(h.reduce((a,b)=>a+b,0)/h.length):null;const nd=t.div===0?null:t.div>=5?3:t.div-1;const nat=natFans(t),natN=nd!=null?natFans({...t,div:nd}):null;
+       return `<div class="stat-grid"><div><span class="label">Lotação média</span><b class="num" style="color:${avg==null?'var(--muted)':avg>=90?'var(--ok)':'var(--fg)'}">${avg==null?'—':avg+'%'}</b><small class="muted">${h.length?`últimos ${h.length} jogos em casa`:'ainda sem jogos em casa'}</small></div>
+         <div><span class="label">Público potencial</span><b class="num">${t.fans.toLocaleString('pt-BR')}</b><small class="muted">hoje, por jogo</small></div>
+         <div><span class="label">Natural na ${DIVN[t.div]}</span><b class="num">${nat.toLocaleString('pt-BR')}</b><small class="muted">torcida ${GRN[grOf(t)].toLowerCase()}</small></div>
+         ${natN!=null?`<div><span class="label">Natural na ${DIVN[nd]}</span><b class="num">${natN.toLocaleString('pt-BR')}</b><small class="muted">se subir</small></div>`:''}</div>
+         ${note('O público potencial anda aos poucos em direção ao natural da divisão. Vitórias, torcida animada e ingresso barato enchem mais o estádio.')}`})()}
      <div class="spread"><div><span class="label">Ingresso</span><div style="font:800 24px var(--display)" class="num">R$ ${t.price}</div></div>
        <div class="row" style="gap:6px"><button class="btn sm" data-act="price" data-d="-5" aria-label="Baixar R$ 5">−5</button><button class="btn sm" data-act="price" data-d="-1" aria-label="Baixar R$ 1">−1</button><button class="btn sm" data-act="price" data-d="1" aria-label="Subir R$ 1">+1</button><button class="btn sm" data-act="price" data-d="5" aria-label="Subir R$ 5">+5</button></div></div>
      ${(()=>{const a=attEst(t);return note(`Estimativa por jogo em casa: ${a.toLocaleString('pt-BR')} torcedores (${Math.round(a/t.cap*100)}% do estádio), bilheteria de ${money(a*t.price)}. Referência na ${DIVN[t.div]}: R$ ${PRICE[t.div]}; acima de R$ ${Math.round(PRICE[t.div]*1.3)} a torcida reclama.`)})()}`)}
