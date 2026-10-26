@@ -611,7 +611,7 @@ function sideStr(sd){
   let att=a+m*.5+d*.1,def=g*2+d+m*.5+a*.1;const tac=T(sd.tid).tactic;
   if(tac==='O'){att*=1.13;def*=.9}if(tac==='D'){att*=.86;def*=1.12}
   const sec={mid:m,dsum:d,asum:a};
-  {const t=T(sd.tid);const ch=.94+.08*(t.chem??70)/100;att*=ch;def*=ch;if(t.train==='A')att*=1.04;if(t.train==='D')def*=1.04;if(t.captain&&sd.on.includes(t.captain)){att*=1.02;def*=1.02}}
+  {const t=T(sd.tid);const ch=.86+.16*(t.chem??70)/100;att*=ch;def*=ch;if(t.train==='A')att*=1.04;if(t.train==='D')def*=1.04;if(t.captain&&sd.on.includes(t.captain)){att*=1.02;def*=1.02}}
   return {att,def,...sec}}
 function attendance(t){return Math.min(capOf(t),Math.round(t.fans*Math.pow(PRICE[t.div]/t.price,1.25)*(.7+.6*(t.mood??60)/100)*rnd(.85,1.05)))}
 function newMatch(h,a,comp,div,o={}){const ht=T(h);const neutral=!!o.neutral;const att=neutral?Math.round(rnd(30000,60000)):attendance(ht);const occ=neutral?1:att/capOf(ht);
@@ -1376,8 +1376,9 @@ function aiMarket(){
     if(!cands.length)continue;const p=pick(cands);const price=r1k(value(p)*rnd(1,1.3));if(buyer.cash<price*1.3)continue;
     const from=T(p.team);transfer(p.id,buyer.id,price);p.sal=wage(p);p.cEnd=S.season+ri(1,4);out.push(`${p.name} deixa o ${from.name} e vai para o ${buyer.name} por ${money(price)}.`)}
   S.free=(S.free||[]).filter(id=>P(id)&&P(id).team==null);
-  if(S.free.length&&Math.random()<.4){const tm=pick(ai.filter(t=>t.players.length<20&&!t.foreign));if(tm){const fp=S.free.map(P).filter(p=>forOK(tm,p)).sort((a,b)=>b.str-a.str).slice(0,6);const p=fp.length?pick(fp):null;if(p){
-    p.team=tm.id;tm.players.push(p.id);p.cEnd=S.season+ri(1,3);p.since=S.season;p.sal=wage(p);delete p.freeSince;S.free=S.free.filter(i=>i!==p.id);out.push(`${p.name}, que estava sem clube, assina com o ${tm.name}.`)}}}
+  for(let k=0;k<2&&S.free.length;k++){if(Math.random()>.5)continue;const top=S.free.map(P).sort((a,b)=>b.str-a.str).slice(0,4);const p=wpick(top,(x,i)=>Math.max(1,x.str-30));if(!p)continue;
+    const tms=ai.filter(t=>!t.foreign&&t.players.length<22&&!banned(t)&&forOK(t,p)&&p.str>=BASE[t.div]-3&&p.str<=BASE[t.div]+14);if(!tms.length)continue;const tm=pick(tms);
+    p.team=tm.id;tm.players.push(p.id);p.cEnd=S.season+ri(1,3);p.since=S.season;p.sal=wage(p);delete p.freeSince;S.free=S.free.filter(i=>i!==p.id);out.push(`${p.name}, que estava sem clube, assina com o ${tm.name}.`)}
   out.forEach(s=>news(s));return out}
 function spontOffer(t){
   t.pOffers=(t.pOffers||[]).filter(o=>o.exp>=S.md&&P(o.pid)&&P(o.pid).team===t.id&&!isHuman(o.tid));
@@ -1708,7 +1709,7 @@ function renderTabela(){
 
 /* ---------- mercado ---------- */
 function mkPool(t){const mk={};S.market.forEach(x=>mk[x.pid]=x.price);
-  if(UI.mview==='free')return (S.free||[]).filter(id=>P(id)&&P(id).team==null).map(id=>({pid:id,price:freeFee(P(id)),free:true}));
+  if(UI.mview==='free')return (S.free||[]).filter(id=>P(id)&&P(id).team==null).map(id=>{const a=freeAsk(P(id),t);return {pid:id,price:a.fee,free:true,no:!a.ok}});
   if(UI.mview==='all')return Object.values(S.players).filter(p=>p.team!=null&&!isHuman(p.team)&&!p.loan).map(p=>mk[p.id]!=null?{pid:p.id,price:mk[p.id]}:{pid:p.id,price:value(p),bid:true});
   return S.market.filter(x=>P(x.pid)&&P(x.pid).team!=null&&!isHuman(P(x.pid).team)).map(x=>({...x}))}
 const MFDEF={min:'',max:'',pot:'',age:'',price:'',sal:'',div:'',nat:'',ctr:'',kind:'all',q:''};
@@ -1720,7 +1721,7 @@ function renderMercado(){
   add(q,x=>P(x.pid).name.toLowerCase().includes(q)||(!x.free&&T(P(x.pid).team).name.toLowerCase().includes(q)));
   add(+mf.min,x=>P(x.pid).str>=+mf.min);add(+mf.max,x=>P(x.pid).str<=+mf.max);
   add(+mf.pot,x=>potRange(P(x.pid))[1]>=+mf.pot);add(+mf.age,x=>P(x.pid).age<=+mf.age);
-  add(mf.price,x=>x.price<=(mf.price==='cash'?t.cash:+mf.price));add(+mf.sal,x=>wageFor(P(x.pid),t)<=+mf.sal);
+  add(mf.price,x=>x.price<=(mf.price==='cash'?t.cash:+mf.price));add(+mf.sal,x=>sigWage(P(x.pid),t)<=+mf.sal);
   add(mf.div!==''&&!free,x=>String(T(P(x.pid).team).div)===String(mf.div));
   add(mf.nat,x=>mf.nat==='br'?!isFor(P(x.pid)):isFor(P(x.pid)));
   add(mf.ctr&&!free,x=>P(x.pid).cEnd<=S.season);
@@ -1728,7 +1729,7 @@ function renderMercado(){
   add(mf.kind==='deal'&&!free,x=>!x.bid&&x.price/value(P(x.pid))<=1.12);
   add(mf.kind==='prom',x=>isPromise(P(x.pid)));
   const sorters={str:(a,b)=>P(b.pid).str-P(a.pid).str,pot:(a,b)=>potRange(P(b.pid))[1]-potRange(P(a.pid))[1],price:(a,b)=>a.price-b.price,
-    age:(a,b)=>P(a.pid).age-P(b.pid).age,sal:(a,b)=>wageFor(P(a.pid),t)-wageFor(P(b.pid),t),cb:(a,b)=>a.price/Math.pow(P(a.pid).str,3)-b.price/Math.pow(P(b.pid).str,3)};
+    age:(a,b)=>P(a.pid).age-P(b.pid).age,sal:(a,b)=>sigWage(P(a.pid),t)-sigWage(P(b.pid),t),cb:(a,b)=>a.price/Math.pow(P(a.pid).str,3)-b.price/Math.pow(P(b.pid).str,3)};
   list.sort(sorters[UI.msort]||sorters.str);
   const full=t.players.length>=26;
   const sel=(k,lab,opts)=>`<label class="fsel"><span>${lab}</span><select data-in="mf" data-k="${k}">${opts.map(([v,l])=>`<option value="${v}" ${String(mf[k])===String(v)?'selected':''}>${l}</option>`).join('')}</select></label>`;
@@ -1756,13 +1757,13 @@ function renderMercado(){
    ${needPanel(t)}
    <div class="seg" role="group">${[['T','Todos'],['G','GOL'],['D','ZAG'],['M','MEI'],['A','ATA']].map(([k,l])=>`<button data-act="mpos" data-p="${k}" aria-pressed="${(UI.mpos||'T')===k}">${l}</button>`).join('')}</div>
    <label class="fsel" style="max-width:260px"><span>Ordenar por</span><select data-in="msort">${[['str','Força'],['pot','Potencial'],['price','Menor preço'],['cb','Custo-benefício'],['age','Mais jovens'],['sal','Menor salário']].map(([k,l])=>`<option value="${k}" ${(UI.msort||'str')===k?'selected':''}>${l}</option>`).join('')}</select></label>
-   <span class="muted" style="font-size:13px">${list.length} jogador${list.length===1?'':'es'}${free?' sem clube: sem custo de transferência, só luvas':view==='all'?' de todos os clubes: os que estão à venda têm preço; nos outros, faça uma proposta':''}</span>
-   <div>${list.slice(0,lim).map(x=>{const p=P(x.pid);const can=t.cash>=x.price&&!full;
+   <span class="muted" style="font-size:13px">${list.length} jogador${list.length===1?'':'es'}${free?' sem clube: sem custo de transferência, só luvas. Quem é bem mais forte que a sua divisão pede luvas maiores ou recusa, e todos pedem salário do próprio nível':view==='all'?' de todos os clubes: os que estão à venda têm preço; nos outros, faça uma proposta':''}</span>
+   <div>${list.slice(0,lim).map(x=>{const p=P(x.pid);const can=t.cash>=x.price&&!full&&!x.no;
      return `<div class="mrow"><span class="pos ${p.pos}">${POSN[p.pos]}</span>
-      <button class="pname" data-act="player" data-pid="${p.id}"><b>${esc(p.name)}</b><small>${x.free?'sem clube':`<span style="display:inline-flex;vertical-align:middle">${crest(p.team,'sm')}</span> ${esc(T(p.team).short)}`} · ${isFor(p)?p.nat+' · ':''}${p.age} anos · ${money(wageFor(p,t))}/data</small><small>pot. ${potTxt(p)}${p.rn?' · nota '+avgR(p):''}${x.free?'':` · contrato até T${p.cEnd}`}${wk[p.pos]!=null&&p.str>wk[p.pos]?` · <b style="color:var(--ok)">+${p.str-wk[p.pos]} sobre seu titular</b>`:''}</small>${p.inj||p.susp||isPromise(p)?`<small style="margin-top:2px">${statusTags(p)}</small>`:''}</button>
+      <button class="pname" data-act="player" data-pid="${p.id}"><b>${esc(p.name)}</b><small>${x.free?'sem clube':`<span style="display:inline-flex;vertical-align:middle">${crest(p.team,'sm')}</span> ${esc(T(p.team).short)}`} · ${isFor(p)?p.nat+' · ':''}${p.age} anos · ${money(sigWage(p,t))}/data</small><small>pot. ${potTxt(p)}${p.rn?' · nota '+avgR(p):''}${x.free?'':` · contrato até T${p.cEnd}`}${wk[p.pos]!=null&&p.str>wk[p.pos]?` · <b style="color:var(--ok)">+${p.str-wk[p.pos]} sobre seu titular</b>`:''}</small>${p.inj||p.susp||isPromise(p)?`<small style="margin-top:2px">${statusTags(p)}</small>`:''}</button>
       <span class="str">${p.str}${trendIcon(p)}</span>
       <div class="buy">${x.bid?`<span class="price num">${money(x.price)}</span><small>valor de mercado</small><button class="btn sm" data-act="player" data-pid="${p.id}" ${full?'disabled':''}>Proposta</button>`
-        :`<span class="price num">${money(x.price)}</span><small>${x.free?'luvas':dealTag(x,p)}</small><button class="btn sm ${can?'primary':''}" data-act="${x.free?'signFree':'buy'}" data-pid="${p.id}" ${can?'':'disabled'}>${x.free?'Contratar':'Comprar'}</button>`}</div></div>`}).join('')||`<p class="muted">${free?'Nenhum jogador livre com esses filtros. Jogadores ficam livres quando o contrato acaba sem renovação.':'Nenhum jogador com esses filtros.'}</p>`}</div>
+        :`${x.no?'<span class="price" style="font-size:13px;color:var(--danger)">Recusa</span><small>nível acima</small>':`<span class="price num">${money(x.price)}</span><small>${x.free?'luvas':dealTag(x,p)}</small>`}<button class="btn sm ${can?'primary':''}" data-act="${x.free?'signFree':'buy'}" data-pid="${p.id}" ${can?'':'disabled'}>${x.free?'Contratar':'Comprar'}</button>`}</div></div>`}).join('')||`<p class="muted">${free?'Nenhum jogador livre com esses filtros. Jogadores ficam livres quando o contrato acaba sem renovação.':'Nenhum jogador com esses filtros.'}</p>`}</div>
    ${list.length>lim?`<button class="btn" data-act="mmore">Ver mais (${list.length-lim} restantes)</button>`:''}
    ${helpFold('helpMk','À venda: jogadores que os clubes anunciaram, com preço fixo (barganha é até +12% sobre o valor, justo até +25%, caro acima disso). Todos: qualquer jogador de outro clube; quem não está à venda pede proposta, e o clube pode aceitar, recusar ou contrapropor. Livres: sem clube, você paga só as luvas, mas só pode vendê-los a partir da temporada seguinte. Quem foi comprado ou renovou fica 10 datas sem poder ser negociado. Clubes do exterior cobram mais. Limite de 9 estrangeiros e de 26 jogadores no elenco. Para vender os seus, abra o jogador no Elenco.')}
   </section>`}
@@ -1950,12 +1951,18 @@ function contractsPanel(t){
 function seedFree(){S.free=S.free||[];for(let i=0;i<14;i++){const p=makePlayer(pick(['G','D','D','M','M','A','A']),BASE[ri(1,3)]-2,null);p.team=null;p.idol=false;p.freeSince=S.season;S.free.push(p.id)}}
 function releaseFree(p){const t=T(p.team);t.players=t.players.filter(i=>i!==p.id);t.lineup=t.lineup.filter(i=>i!==p.id);
   p.team=null;p.idol=false;delete p.sale;delete p.ren;p.leaving=false;p.freeSince=S.season;(S.free=S.free||[]).push(p.id)}
-const freeFee=p=>r1k(value(p)*.15);
+const levelDiv=p=>{for(let d=0;d<4;d++)if(p.str>=BASE[d]-4)return d;return 3};
+const sigWage=(p,t)=>Math.round(wageFor(p,t?{div:Math.min(t.div,levelDiv(p))}:null)*1.2/100)*100;
+function freeAsk(p,t){if(!t)return {ok:true,fee:r1k(value(p)*.15),sal:sigWage(p,t)};const mg=mgrOf(t.id);const rep=mg?(mg.rep??10):10;
+  const dv=S.teams.filter(x=>x.div===t.div);const avg=dv.length?dv.reduce((s,x)=>s+teamRating(x),0)/dv.length:BASE[t.div];const gap=p.str-avg-rep/10;const sal=sigWage(p,t);
+  if(gap>10)return {ok:false,fee:0,sal,why:`Não quer jogar na ${DIVN[t.div]}: espera um clube do nível dele. Reputação maior ajuda a convencer.`};
+  const mult=gap>4?1+(gap-4)*.15:1;return {ok:true,fee:r1k(value(p)*.15*mult),sal,mult}}
+const freeFee=p=>freeAsk(p,myTeam()).fee;
 const RESALE=10;const recent=p=>p&&p.bought!=null&&absMd()-p.bought<RESALE?RESALE-(absMd()-p.bought):0;
 const saleLock=p=>{if(!p)return '';if(p.lockS!=null&&S.season<p.lockS)return `Contratado sem custo de transferência: só pode ser negociado a partir da temporada ${p.lockS}.`;const r=recent(p);return r?`Chegou ou renovou há pouco: só pode ser negociado daqui a ${r} data${r>1?'s':''}.`:''};
 function buyPlayer(t,p,price){if(banned(t)){toast(`Clube proibido de contratar até o fim da temporada ${t.ban}.`);return}if(p.loan){toast('Jogador emprestado não pode ser negociado.');return}if(!forOK(t,p)){toast(`Limite de ${FLIM} estrangeiros no elenco.`);return}const fromName=p.team!=null?T(p.team).name:null;const big=p.str>=teamRating(t)+8;
   if(p.team!=null)transfer(p.id,t.id,price);else{p.team=t.id;t.players.push(p.id);t.cash-=price;book(t,'buy',-price);delete p.freeSince;S.free=(S.free||[]).filter(i=>i!==p.id);p.since=S.season;p.bought=absMd();p.lockS=S.season+1}
-  p.cEnd=S.season+((UI.buyY&&UI.buyY[p.id])||defYears(p));p.sal=Math.round(wage(p)*(fromName?1.2:1.2)/100)*100;
+  p.cEnd=S.season+((UI.buyY&&UI.buyY[p.id])||defYears(p));p.sal=sigWage(p,t);t.chem=Math.max(30,(t.chem??70)-4);
   const rq=(t.reqs||[]).find(r=>r.type==='buy'&&r.pos===p.pos&&p.str>=r.min);if(rq){t.mood=clamp(t.mood+rq.bonus,0,100);t.reqs=t.reqs.filter(r=>r!==rq);news(rq.done,[t.id])}
   if(big){t.mood=clamp(t.mood+5,0,100);news(`A torcida comemora a chegada de ${p.name}.`,[t.id])}
   S.market=S.market.filter(x=>x.pid!==p.id);
@@ -2230,7 +2237,7 @@ function renderModal(){
         ${p.leaving?`<div class="panel stack" style="margin-top:12px;border-color:var(--danger)">${note('Vai sair de graça no fim da temporada.')}<button class="btn sm" data-act="renReopen" data-pid="${p.id}" style="align-self:flex-start">Reabrir negociação</button></div>`:(!p.loan&&p.cEnd<=S.season)?renewBox(p):''}
         ${p.loan?'':saleBox(p)}`):(()=>{const mt=myTeam();if(!mt)return '';
        if(p.loan&&isHuman(p.loan.owner))return `<div class="panel" style="margin-top:12px">${note(`Emprestado por você ao ${esc(T(p.team).name)} até o fim da temporada.`)}</div>`;
-       if(free){const fee=freeFee(p);return `${yearsSeg(p)}<div class="spread" style="margin-top:12px"><span>Sem custo de transferência. Luvas: <b>${money(fee)}</b> · salário ${money(Math.round(wageFor(p,mt)*1.2/100)*100)}/data</span><button class="btn primary" data-act="signFree" data-pid="${p.id}" ${mt.cash>=fee&&mt.players.length<26?'':'disabled'}>Contratar</button></div>`}
+       if(free){const a=freeAsk(p,mt);const fee=a.fee;if(!a.ok)return `<div class="panel" style="margin-top:12px"><span class="warn">${esc(a.why)}</span></div>`;return `${yearsSeg(p)}<div class="spread" style="margin-top:12px"><span>Sem custo de transferência. Luvas: <b>${money(fee)}</b>${a.mult>1?` (acima do normal: ele é mais forte que a média da ${DIVN[mt.div]})`:''} · salário ${money(a.sal)}/data${levelDiv(p)<mt.div?` (pede salário de ${DIVN[levelDiv(p)]})`:''}</span><button class="btn primary" data-act="signFree" data-pid="${p.id}" ${mt.cash>=fee&&mt.players.length<26?'':'disabled'}>Contratar</button></div>`}
        const mk=S.market.find(x=>x.pid===p.id);if(isHuman(p.team))return '';if(!mk)return bidBox(p);
        return `${yearsSeg(p)}
        <div class="spread" style="margin-top:12px"><span>Preço pedido <b>${money(mk.price)}</b> · ${dealTag(mk,p)}${p.inj?`<br><span class="warn">Lesionado: fora por mais ${p.inj} data${p.inj>1?'s':''}.</span>`:''}${p.susp?'<br><span class="warn">Suspenso na próxima data.</span>':''}</span><button class="btn primary" data-act="buy" data-pid="${p.id}" ${mt.cash>=mk.price&&mt.players.length<26?'':'disabled'}>Comprar</button></div>`})()}`}
@@ -2365,7 +2372,7 @@ const ACT={
   buy(d){const t=myTeam();const it=S.market.find(x=>x.pid===d.pid);const p=P(d.pid);if(!it||!p)return;
     if(t.cash<it.price){toast('Caixa insuficiente.');return}if(t.players.length>=26){toast('Elenco cheio (26).');return}
     buyPlayer(t,p,it.price)},
-  signFree(d){const t=myTeam();const p=P(d.pid);if(!p||p.team!=null)return;const fee=freeFee(p);if(t.cash<fee){toast('Caixa insuficiente.');return}if(t.players.length>=26){toast('Elenco cheio (26).');return}buyPlayer(t,p,fee)},
+  signFree(d){const t=myTeam();const p=P(d.pid);if(!p||p.team!=null)return;const a=freeAsk(p,t);if(!a.ok){toast(a.why);return}const fee=a.fee;if(t.cash<fee){toast('Caixa insuficiente.');return}if(t.players.length>=26){toast('Elenco cheio (26).');return}buyPlayer(t,p,fee)},
   bidStep(d){const p=P(d.pid);const b=UI.bid&&UI.bid.pid===p.id?UI.bid:{pid:p.id,amt:r1k(value(p)*1.1)};UI.bid={pid:p.id,amt:Math.max(1e4,b.amt+ +d.d),counter:b.counter};renderModal()},
   bidSend(d){const t=myTeam();const p=P(d.pid);const b=UI.bid&&UI.bid.pid===p.id?UI.bid:{pid:p.id,amt:r1k(value(p)*1.1)};if(t.cash<b.amt)return;p.bidMd=absMd();const req=bidReq(p);
     if(b.amt>=req){UI.bid=null;buyPlayer(t,p,b.amt);return}
