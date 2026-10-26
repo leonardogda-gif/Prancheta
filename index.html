@@ -996,7 +996,7 @@ function finishMatchday(){
   if(e.t==='KF')humans.filter(id=>S.kParts.includes(id)).forEach(id=>buildCR('K',id));
   if(e.t==='M1')humans.filter(id=>S.ko.M0.some(x=>x.h===id||x.a===id)).forEach(id=>buildCR('M',id));
   humans.forEach(id=>{const Rp=rep[id];if(Rp.match&&Math.random()<.3)Rp.press=pressQ(T(id),Rp)});
-  coachMoves(e,rep);if(e.t==='L'&&(e.r===2||e.r===9))aiInvest();if(e.t==='L'){aiFinance();if(e.r>=3)spontDeals(rep)}
+  coachMoves(e,rep);if(e.t==='L'&&(e.r===2||e.r===9))aiInvest();if(e.t==='L'){aiFinance();if(e.r>=3)spontDeals(rep);crisisCheck()}
   buildPaper(e,L.ms,rep,humans);delete S._nb;
   S.rep=rep;
   S.md++;
@@ -1355,7 +1355,7 @@ function aiTrim(){let n=0;
     transfer(p.id,buyer.id,price);p.sal=wage(p);p.cEnd=S.season+ri(2,4);n++;news(`${t.name} vende ${p.name} ao ${buyer.name} por ${money(price)} para aliviar a folha.`)}}
 function aiReinforce(){aiTrim();const out=[];let n=0;
   for(const t of shuffle(S.teams.filter(x=>!isHuman(x.id)&&!x.foreign))){if(n>=3)break;
-    if(Math.random()>.06*dff().ai)continue;if(inDebt(t)||t.players.length>=24||t.cash<payroll(t)*20)continue;
+    if(Math.random()>.06*dff().ai)continue;if(inDebt(t)||banned(t)||t.players.length>=24||t.cash<payroll(t)*20)continue;
     const xi=bestXI(t,[4,4,2]).map(P);const weak=xi.filter(p=>p.pos!=='G').sort((a,b)=>a.str-b.str)[0];if(!weak)continue;
     const c=Object.values(S.players).filter(p=>p.pos===weak.pos&&p.team!=null&&p.team!==t.id&&!p.loan&&!isHuman(p.team)&&!T(p.team).foreign&&forOK(t,p)&&T(p.team).div>=t.div&&T(p.team).players.length>15&&p.str>=weak.str+4&&p.age<=30).sort((a,b)=>b.str-a.str).slice(0,6);
     if(!c.length)continue;const p=pick(c);const price=r1k(value(p)*rnd(1.1,1.3));if(price>t.cash*.5)continue;
@@ -1364,7 +1364,7 @@ function aiReinforce(){aiTrim();const out=[];let n=0;
 function aiMarket(){
   const ai=S.teams.filter(t=>!isHuman(t.id)&&!t.foreign);const out=[];
   for(let k=ri(0,2);k>0;k--){
-    const buyer=wpick(ai,t=>Math.max(1,t.cash/1e6)+(4-t.div)*2);if(buyer.players.length>=22||inDebt(buyer))continue;
+    const buyer=wpick(ai,t=>Math.max(1,t.cash/1e6)+(4-t.div)*2);if(buyer.players.length>=22||inDebt(buyer)||banned(buyer))continue;
     const pos=pick(['D','M','A','A','M','G']);const weak=squad(buyer).filter(p=>p.pos===pos).sort((a,b)=>a.str-b.str)[0];
     const bar=(weak?weak.str:BASE[buyer.div])+3;
     const cands=Object.values(S.players).filter(p=>p.pos===pos&&p.team!=null&&!p.loan&&p.team!==buyer.id&&!isHuman(p.team)&&!T(p.team).world&&forOK(buyer,p)&&T(p.team).div>=buyer.div&&T(p.team).players.length>15&&p.str>=bar&&p.age<=31).sort((a,b)=>b.str-a.str).slice(0,8);
@@ -1487,6 +1487,8 @@ function pendings(t){const L=[];const add=(lv,txt,act,arg,btn)=>L.push({lv,txt,a
   if(!t.spon&&t.sOffers.length)add('hi','Sem patrocinador: escolha uma das propostas','clv','fin','Escolher');else if(t.sOffers.length)add('lo','Novas propostas de patrocínio','clv','fin','Ver');
   if(t.nOffers&&t.nOffers.length)add('lo','Propostas de naming rights do estádio','clv','fin','Ver');
   for(const [k,n] of [['loan','banco'],['floan','financeira']])if(t[k]&&t[k].late)add('hi',`Parcela atrasada com ${n === 'banco'?'o banco':'a financeira'}`,'clv','fin','Ver');
+  if(banned(t))add('hi',`Proibido de contratar até o fim da temporada ${t.ban} (punição por dívidas)`,'clv','fin','Ver');
+  else if(debtTot(t)>yearRev(t)*.7)add('hi',`Dívida alta (${money(debtTot(t))}): perto de um ano de receita. Pode levar a punição ou à venda do clube a um investidor`,'clv','fin','Finanças');
   if(t.cash<0)add('hi',`Caixa negativo (${money(t.cash)}): a diretoria cobra a cada data`,'clv','fin','Finanças');
   else{const pj=finProj(t);if(pj.end<0)add('mid',`Previsão de fechar a temporada no vermelho (${money(pj.end)})`,'clv','fin','Finanças')}
   const tired=t.lineup.filter(id=>P(id)&&avail(P(id))&&(P(id).fit??100)<70).length;if(tired)add('mid',`${tired} titular${tired>1?'es':''} cansado${tired>1?'s':''} (condição abaixo de 70%)`,'elv','xi','Escalação');
@@ -1527,6 +1529,7 @@ function buildPaper(e,ms,rep,humans){const nb=S._nb||[];const C=[];
     if(isHuman(H.id)||isHuman(A.id))s+=15;
     C.push({s,txt,sub:`${H.name} ${hg} × ${ag} ${A.name}${m.pens?` (pênaltis ${m.pens[0]}–${m.pens[1]})`:''} · ${COMPN[m.comp]||''}`})}
   nb.filter(n=>/é campeão/.test(n.text)).forEach(n=>C.push({s:100,txt:n.text,sub:entryLabel(e)}));
+  nb.filter(n=>/(Virada no|Punição ao)/.test(n.text)).forEach(n=>C.push({s:80,txt:n.text.split(':')[0],sub:n.text.split(': ').slice(1).join(': ')}));
   nb.filter(n=>/demite o técnico/.test(n.text)).forEach(n=>C.push({s:52,txt:n.text.split('.')[0],sub:n.text.split('. ').slice(1).join('. ')}));
   C.sort((a,b)=>b.s-a.s);const seen=new Set();const uniq=C.filter(c=>{if(seen.has(c.txt))return false;seen.add(c.txt);return true});
   const club={};humans.forEach(id=>{club[id]=nb.filter(n=>n.tids&&n.tids.includes(id)).map(n=>n.text).slice(0,6)});
@@ -1536,7 +1539,7 @@ function buildPaper(e,ms,rep,humans){const nb=S._nb||[];const C=[];
   const art=Object.values(S.players).filter(p=>p.g>0&&p.team!=null&&!T(p.team).foreign).sort((a,b)=>b.g-a.g).slice(0,3).map(p=>`${p.name} (${T(p.team).short}) ${p.g} gol${p.g>1?'s':''}`);
   const own=n=>n.tids&&n.tids.some(id=>humans.includes(id));
   const merc=nb.filter(n=>!own(n)&&/(deixa o|vende |se reforça|assina com|contratado junto)/.test(n.text)).map(n=>n.text).slice(0,6);
-  const bast=nb.filter(n=>!own(n)&&/(técnico|obra|Seleção|convoca|patrocín|naming|estádio do|divisões nacionais|vaga na Série D|banco|financeira|parcela|Recém-promovido|Rebaixado,|Endividado,)/.test(n.text)&&!/demite o técnico/.test(n.text)).map(n=>n.text).slice(0,6);
+  const bast=nb.filter(n=>!own(n)&&/(técnico|obra|Seleção|convoca|patrocín|naming|estádio do|divisões nacionais|vaga na Série D|banco|financeira|parcela|Recém-promovido|Rebaixado,|Endividado,|Punição|investidor)/.test(n.text)&&!/demite o técnico/.test(n.text)).map(n=>n.text).slice(0,6);
   const fired=nb.filter(n=>/demite o técnico/.test(n.text)).map(n=>n.text);
   S.papers=S.papers||[];S.papers.unshift({season:S.season,label:entryLabel(e),head:uniq[0]||{txt:entryLabel(e),sub:''},dest:uniq.slice(1,5),club,pais,art,merc,bast:[...fired,...bast].slice(0,7)});if(S.papers.length>10)S.papers.length=10}
 function renderPaper(i){const p=(S.papers||[])[i||0];const t=myTeam();if(!p)return `<section class="stack"><div class="panel">${note('Ainda não há jornal. Ele sai depois de cada data.')}</div><button class="btn primary big" data-act="tab" data-t="jogo">Continuar</button></section>`;
@@ -1568,7 +1571,7 @@ function spontDeals(rep){for(const t of S.teams){if(t.foreign||t.div>=5||t.spS==
       else{const o=no.sort((a,b)=>(b.upfront+b.perData*14*b.seasons)-(a.upfront+a.perData*14*a.seasons))[0];t.nr={name:o.name,perData:o.perData,upfront:o.upfront,seasons:o.seasons,left:o.seasons};t.cash+=o.upfront;t.stadium='Arena '+o.name;news(`O estádio do ${t.name} passa a se chamar ${t.stadium}.`)}}}
   S.teams.forEach(t=>{if(t.sOffers&&t.sOffers.length)t.sOffers=t.sOffers.filter(o=>!o.spont||o.exp>=S.md+1)})}
 function aiFinance(){for(const t of S.teams){if(t.foreign||isHuman(t.id)||t.div>=5)continue;if(!t.loan&&t.cash<payroll(t)*2)aiTakeLoan(t,'para pagar a folha');else if(t.loan&&!t.floan&&t.cash<0)aiTakeLoan(t,'para cobrir o caixa negativo')}}
-function promotedReinforce(ids){const XI={};S.teams.forEach(x=>{if(!x.foreign)XI[x.id]=new Set(bestXI(x,[4,4,2]))});for(const id of ids){const t=T(id);if(!t||isHuman(id)||t.div>=5)continue;const others=S.teams.filter(x=>x.div===t.div&&x.id!==id);const target=Math.round(others.reduce((a,x)=>a+teamRating(x),0)/others.length);let n=0,need=4;
+function promotedReinforce(ids){const XI={};S.teams.forEach(x=>{if(!x.foreign)XI[x.id]=new Set(bestXI(x,[4,4,2]))});for(const id of ids){const t=T(id);if(!t||isHuman(id)||t.div>=5||banned(t))continue;const others=S.teams.filter(x=>x.div===t.div&&x.id!==id);const target=Math.round(others.reduce((a,x)=>a+teamRating(x),0)/others.length);let n=0,need=4;
     for(let k=0;k<8&&n<need;k++){if(teamRating(t)>=target-2)break;const xi=bestXI(t,[4,4,2]).map(P);const weak=xi.filter(p=>p.pos!=='G').sort((a,b)=>a.str-b.str)[0];if(!weak||weak.str>=target)break;
       const c=Object.values(S.players).filter(p=>p.pos===weak.pos&&p.team!=null&&p.team!==id&&!p.loan&&!isHuman(p.team)&&!T(p.team).world&&(T(p.team).foreign||T(p.team).div>t.div||!(XI[p.team]&&XI[p.team].has(p.id)))&&forOK(t,p)&&T(p.team).players.length>16&&p.str>=target-2&&p.str<=target+6&&p.age<=31).sort((a,b)=>value(a)-value(b)).slice(0,6);
       if(!c.length)break;const p=pick(c);const price=r1k(value(p)*1.1);if(t.cash<price*1.1&&(t.loan||!aiTakeLoan(t,'para se reforçar após o acesso')))break;if(t.cash<price)break;
@@ -1576,6 +1579,21 @@ function promotedReinforce(ids){const XI={};S.teams.forEach(x=>{if(!x.foreign)XI
 function relegatedSell(ids){for(const id of ids){const t=T(id);if(!t||isHuman(id))continue;const others=S.teams.filter(x=>x.div===t.div&&x.id!==id);const avg=others.reduce((a,x)=>a+teamRating(x),0)/others.length;const ps=squad(t).filter(p=>!p.loan&&!p.idol).sort((a,b)=>b.str-a.str).slice(0,6);let k=0;
     for(const p of ps){if(t.players.length<=15)break;if(k>=2&&teamRating(t)<=avg+3)break;k++;const price=r1k(value(p));const fr=S.teams.filter(x=>x.foreign&&x.players.length<26);const b=(Math.random()<.7&&fr.length?pick(fr):null)||S.teams.filter(x=>!isHuman(x.id)&&!x.foreign&&x.div<t.div&&x.cash>=price*1.2&&x.players.length<24&&forOK(x,p)).sort((a,c)=>c.cash-a.cash)[0]||pick(fr);if(!b)continue;
       transfer(p.id,b.id,price);p.sal=wage(p);p.cEnd=S.season+ri(1,3);news(`Rebaixado, o ${t.name} vende ${p.name} ao ${b.name} por ${money(price)}.`)}}}
+const debtTot=t=>(t.loan?t.loan.owe+(t.loan.pen||0):0)+(t.floan?t.floan.owe+(t.floan.pen||0):0)+Math.max(0,-t.cash);
+const yearRev=t=>Math.max(1,revPerData(t)*14);
+const banned=t=>t&&t.ban!=null&&S.season<=t.ban;
+function crisisCheck(){for(const t of S.teams){if(t.foreign||t.div>=5)continue;if(t.crisisS!=null&&S.season-t.crisisS<2)continue;
+    const d=debtTot(t),late=(t.loan&&t.loan.late||0)+(t.floan&&t.floan.late||0);if(d<yearRev(t)||(late<2&&t.cash>-yearRev(t)*.5))continue;
+    t.crisisS=S.season;const big=audF(t)>=1.2;const inv=Math.random()<(big?.7:.45);
+    if(inv){const inj=r1k(CASH[t.div]*rnd(.8,1.2));t.loan=null;t.floan=null;t.cash=Math.max(0,t.cash)+inj;t.sled&&book(t,'loanIn',0);
+      news(`Virada no ${t.name}: investidor compra o clube (SAF), quita ${money(d)} em dívidas e coloca ${money(inj)} no caixa.`,isHuman(t.id)?[t.id]:[]);
+      const mg=mgrOf(t.id);
+      if(mg){if(Math.random()<.3){fire(mg,'O investidor que comprou o clube trouxe o próprio técnico.')}
+        else{mg.conf=50;if(mg.goal){mg.goal.max=Math.max(0,mg.goal.max-2)}news(`A nova diretoria do ${t.name} mantém ${mg.name}, mas exige mais: ${mg.goal?goalText(mg.goal):'resultados imediatos'}.`,[t.id])}}
+      else if(t.coach){const o=t.coach.name;t.coach=makeCoach(t);news(`Os novos donos do ${t.name} trocam o técnico: sai ${o}, entra ${t.coach.name}.`)}}
+    else{const pts=t.div<4&&S.tab[t.id]&&S.cal.slice(S.md).some(e=>e.t==='L')?6:0;if(pts)S.tab[t.id].pts-=pts;t.ban=S.season+(S.cal.slice(S.md).filter(e=>e.t==='L').length>=5?0:1);
+      [t.loan,t.floan].forEach(L=>{if(L){L.late=0;L.pen=0;L.gate=false}});
+      news(`Punição ao ${t.name} por dívidas: ${pts?`perde ${pts} pontos no Nacional e `:''}fica proibido de contratar até o fim da temporada ${t.ban}. As dívidas foram renegociadas, sem multas.`,isHuman(t.id)?[t.id]:[])}}}
 function riskBanner(){const m=me();if(!m||m.fired||m.conf>=25)return '';
   return `<div class="panel stack risk" role="alert"><b>Cargo em risco</b><span style="font-size:14px">A confiança da diretoria está em ${m.conf}/100. ${m.conf<12?'Mais uma ou duas derrotas e você será demitido.':'Uma sequência ruim pode custar seu emprego.'} Vitórias e um caixa positivo ajudam a recuperar.</span></div>`}
 function nextBand(t){
@@ -1827,6 +1845,7 @@ function renderFinance(t){const pos=standings(t.div).findIndex(x=>x.id===t.id);c
   return fold('fin','Finanças',`<b class="num" style="color:${t.cash<0?'var(--danger)':'var(--ok)'}">${money(t.cash)}</b>`,'',`
     <div class="stat-grid"><div><span class="label">Caixa</span><b class="num">${money(t.cash)}</b></div><div><span class="label">Saldo na temporada</span>${sg(net)}</div>
       <div><span class="label">Previsão no fim</span><b class="num" style="color:${pj.end<0?'var(--danger)':'var(--fg)'}">${pj.end<0?'−':''}${money(Math.abs(pj.end))}</b></div><div><span class="label">Dívidas</span><b class="num" style="color:${debt?'var(--warn)':'var(--muted)'}">${debt?money(debt):'nenhuma'}</b></div></div>
+    ${banned(t)?`<div class="warn">Proibido de contratar até o fim da temporada ${t.ban} (punição por dívidas).</div>`:debtTot(t)>yearRev(t)*.7?`<div class="warn">Dívida de ${money(debtTot(t))}, perto de um ano de receita (${money(r1k(yearRev(t)))}). Acima disso, o clube pode ser punido ou vendido a um investidor.</div>`:''}
     ${note(`Temporada ${S.season}${t.sledFrom?` (desde a data ${t.sledFrom+1})`:''}. A previsão soma o que falta receber de TV, patrocínio garantido, bilheteria média e naming rights, menos salários, manutenção e parcelas. Não inclui prêmios nem transferências.`)}
     <div class="stack" style="gap:8px"><div class="spread"><span class="label">Entradas</span>${sg(ti)}</div>${ins.map(row).join('')||note('Nada ainda.')}</div>
     <div class="stack" style="gap:8px"><div class="spread"><span class="label">Saídas</span>${sg(to)}</div>${outs.map(row).join('')||note('Nada ainda.')}</div>
@@ -1917,7 +1936,7 @@ function releaseFree(p){const t=T(p.team);t.players=t.players.filter(i=>i!==p.id
 const freeFee=p=>r1k(value(p)*.15);
 const RESALE=10;const recent=p=>p&&p.bought!=null&&absMd()-p.bought<RESALE?RESALE-(absMd()-p.bought):0;
 const saleLock=p=>{if(!p)return '';if(p.lockS!=null&&S.season<p.lockS)return `Contratado sem custo de transferência: só pode ser negociado a partir da temporada ${p.lockS}.`;const r=recent(p);return r?`Chegou ou renovou há pouco: só pode ser negociado daqui a ${r} data${r>1?'s':''}.`:''};
-function buyPlayer(t,p,price){if(p.loan){toast('Jogador emprestado não pode ser negociado.');return}if(!forOK(t,p)){toast(`Limite de ${FLIM} estrangeiros no elenco.`);return}const fromName=p.team!=null?T(p.team).name:null;const big=p.str>=teamRating(t)+8;
+function buyPlayer(t,p,price){if(banned(t)){toast(`Clube proibido de contratar até o fim da temporada ${t.ban}.`);return}if(p.loan){toast('Jogador emprestado não pode ser negociado.');return}if(!forOK(t,p)){toast(`Limite de ${FLIM} estrangeiros no elenco.`);return}const fromName=p.team!=null?T(p.team).name:null;const big=p.str>=teamRating(t)+8;
   if(p.team!=null)transfer(p.id,t.id,price);else{p.team=t.id;t.players.push(p.id);t.cash-=price;book(t,'buy',-price);delete p.freeSince;S.free=(S.free||[]).filter(i=>i!==p.id);p.since=S.season;p.bought=absMd();p.lockS=S.season+1}
   p.cEnd=S.season+((UI.buyY&&UI.buyY[p.id])||defYears(p));p.sal=Math.round(wage(p)*(fromName?1.2:1.2)/100)*100;
   const rq=(t.reqs||[]).find(r=>r.type==='buy'&&r.pos===p.pos&&p.str>=r.min);if(rq){t.mood=clamp(t.mood+rq.bonus,0,100);t.reqs=t.reqs.filter(r=>r!==rq);news(rq.done,[t.id])}
@@ -2290,7 +2309,7 @@ const ACT={
   lendOut(d){const p=P(d.pid);const t=T(p.team);if(t.players.length<=14||p.loan)return;
     const ds=S.teams.filter(x=>!isHuman(x.id)&&!x.foreign&&x.div>=t.div&&x.players.length<24).sort((a,b)=>b.div-a.div||a.players.length-b.players.length);const dest=ds[Math.min(ds.length-1,ri(0,3))];if(!dest){toast('Nenhum clube interessado agora.');return}
     moveP(p,dest);p.loan={owner:t.id,until:S.season};UI.sheet=null;news(`${p.name} emprestado ao ${dest.name} até o fim da temporada.`,[t.id]);save();render();toast(`${p.name} vai jogar no ${dest.name}`)},
-  borrowIn(d){const t=myTeam();const p=P(d.pid);const o=T(p.team);const lf=r1k(value(p)*.08);if(t.cash<lf||t.players.length>=26)return;if(!forOK(t,p)){toast(`Limite de ${FLIM} estrangeiros no elenco.`);return}
+  borrowIn(d){const t=myTeam();if(banned(t)){toast(`Clube proibido de contratar até o fim da temporada ${t.ban}.`);return}const p=P(d.pid);const o=T(p.team);const lf=r1k(value(p)*.08);if(t.cash<lf||t.players.length>=26)return;if(!forOK(t,p)){toast(`Limite de ${FLIM} estrangeiros no elenco.`);return}
     t.cash-=lf;o.cash+=lf;book(t,'buy',-lf);moveP(p,t);p.loan={owner:o.id,until:S.season};p.bought=absMd();UI.sheet=null;news(`${p.name} chega emprestado pelo ${o.name} (taxa ${money(lf)}).`,[t.id]);save();render();toast(p.name+' chegou emprestado')},
   pressAns(d){const t=myTeam();const R=S.rep[t.id];if(!R||!R.press||R.press.done!=null)return;const [txt,eff,pid]=R.press.o[+d.i];const mg=me();
     if(eff.mood)t.mood=clamp(t.mood+eff.mood,0,100);if(eff.conf)mg.conf=clamp(mg.conf+eff.conf,0,100);if(eff.chem)t.chem=clamp((t.chem??70)+eff.chem,30,100);if(pid)P(pid).promised=S.season;
