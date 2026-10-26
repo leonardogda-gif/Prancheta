@@ -697,7 +697,7 @@ function startMatchday(){
   if(adj.length)toast('Escalação ajustada automaticamente: '+adj.join(', '));
   const ce=currentEntry();
   UI.live={cupName:entryLabel(ce),ms:buildMatches(),min:0,speed:UI.prefs.speed||2,phase:'1T',paused:false,done:false,timer:null,open:{},sub:null};
-  UI.tab='live';UI.sheet=null;render();window.scrollTo(0,0);if(!UI.live.ms.some(humanIn)){ACT.skip();return}liveSnap();tick();}
+  UI.tab='live';UI.sheet=null;render();window.scrollTo(0,0);if(!UI.live.ms.some(humanIn)){ACT.skip();if(UI.live&&UI.live.done)ACT.liveDone();return}liveSnap();tick();}
 function liveSnap(){const L=UI.live;if(!L||L.done)return;const {timer,sub,...rest}=L;S.live={...rest,savedAt:S.md};L.lastSnap=L.min;save()}
 function resumeLive(){const sl=S&&S.live;if(!sl)return false;if(sl.savedAt!==S.md||!Array.isArray(sl.ms)){S.live=null;return false}
   UI.live={...sl,timer:null,sub:null,paused:false,done:false,open:{}};const L=UI.live;let g=0,r;
@@ -1190,16 +1190,17 @@ function render(){
   else if(live&&UI.live)main.innerHTML=renderLiveHTML();
   else if(m&&m.fired)main.innerHTML=renderFired();
   else if(UI.tab==='paper')main.innerHTML=renderPaper(UI.paperI||0);
+  else if(UI.tab==='dec')main.innerHTML=renderDec();
   else main.innerHTML=({jogo:renderJogo,pos:renderPos,elenco:renderElenco,tabela:renderTabela,mercado:renderMercado,clube:renderClube}[UI.tab]||renderJogo)();
   if(SAVE_ERR&&main.insertAdjacentHTML)main.insertAdjacentHTML('afterbegin',`<div class="panel stack" role="alert" style="border-color:var(--danger);margin-bottom:12px"><b style="color:var(--danger)">⚠ O jogo não está sendo salvo</b><span style="font-size:14px">${esc(SAVE_ERR)} Exporte o jogo agora para não perder o progresso.</span><button class="btn sm" data-act="exportOpen" style="align-self:flex-start">Exportar jogo</button></div>`);
   renderModal();if(sameTab&&y0&&window.scrollTo)window.scrollTo(0,y0)}
 
 function renderTop(){
   const t=myTeam();const multi=S.managers.length>1;const e=currentEntry();
-  const Rp=t&&S.rep&&S.rep[t.id];const pp=UI.tab==='paper'&&S.papers&&S.papers[UI.paperI||0];const lbl=UI.live&&UI.live.done?UI.live.cupName+' · encerrado':pp?pp.label+' · jornal':UI.tab==='pos'&&Rp&&Rp.label?Rp.label+' · relatório':e?entryLabel(e):'';
+  const Rp=t&&S.rep&&S.rep[t.id];const pp=UI.tab==='paper'&&S.papers&&S.papers[UI.paperI||0];const lbl=UI.live&&UI.live.done?UI.live.cupName+' · encerrado':pp?pp.label+' · jornal':(UI.tab==='pos'||UI.tab==='dec')&&Rp&&Rp.label?Rp.label+(UI.tab==='dec'?' · decisões':' · relatório'):e?entryLabel(e):'';
   return `<div class="wrap">
    <div class="brand"><i></i>Prancheta FC</div>
-   <span class="season">Temp. ${pp?pp.season:UI.tab==='pos'&&Rp&&Rp.season?Rp.season:S.season}${lbl?' · '+esc(lbl):''}</span>
+   <span class="season">Temp. ${pp?pp.season:(UI.tab==='pos'||UI.tab==='dec')&&Rp&&Rp.season?Rp.season:S.season}${lbl?' · '+esc(lbl):''}</span>
    ${t?`<div class="club-mini">${crest(t.id,'sm')}<b>${esc(t.name)}</b><span class="cash num ${t.cash<0?'neg':''}">${money(t.cash)}</span></div>`:''}
    ${multi?`<div class="mgrs" role="group" aria-label="Técnicos">${S.managers.map((m,i)=>m.out?'':`<button class="chip" data-act="cur" data-i="${i}" aria-pressed="${i===UI.cur}" ${UI.tab==='live'?'disabled':''}>${m.fired?'<span class="dot"></span>':''}${esc(m.name)}${!m.fired?' · '+esc(T(m.team).short):''}</button>`).join('')}</div>`:''}
   </div>`}
@@ -1773,8 +1774,7 @@ function renderClube(){
   const perRound=tvFor(t,pos)+sponPerL(t.spon)+(t.nr?t.nr.perData:0)-payroll(t);
   return `<section class="stack">
    <div class="row">${crest(t.id,'lg')}<div style="min-width:0"><h2 class="h-sec" style="font-size:28px">${esc(t.name)}</h2><span class="muted">${DIVN[t.div]} · técnico ${esc(mg.name)}${mg.titles.length?' · '+mg.titles.length+' título'+(mg.titles.length>1?'s':''):''}</span></div></div>
-   ${mg.offers.length?`<div class="panel stack" style="border-color:var(--info)"><span class="label">Propostas de emprego</span>${mg.offers.map((o,i)=>`<div class="spread"><div class="row">${crest(o.tid,'sm')}<span><b>${esc(T(o.tid).name)}</b><br><span class="muted" style="font-size:13px">${clubInfo(o.tid)}</span></span></div>
-     <div class="row"><button class="btn sm primary" data-act="offerYes" data-i="${i}">Aceitar</button><button class="btn sm" data-act="offerNo" data-i="${i}">Recusar</button></div></div>`).join('')}</div>`:''}
+   ${jobOffersPanel(mg)}
    ${goalBanner()}
    <div class="seg" role="tablist" aria-label="Seções do clube">${[['fin','Finanças'],['ger','Gestão'],['est','Estádio'],['cfg','Ajustes']].map(([k,l])=>`<button data-act="clv" data-v="${k}" aria-pressed="${(UI.cv||'fin')===k}">${l}</button>`).join('')}</div>
    ${(UI.cv||'fin')!=='ger'?'':fold('dir','Diretoria',`<b style="color:${col}">${confLabel(mg.conf)} · ${mg.conf}</b>`,meter(mg.conf,col,'Confiança da diretoria'),note('Vitória +5, empate +1, derrota −6. Caixa negativo −4 e torcida revoltada −2 por data. O relatório de cada jogo mostra o detalhe. Em zero, você é demitido.'))}
@@ -1817,10 +1817,23 @@ function renderClube(){
      ${UI.confirmNew?`<div class="spread" style="border-top:1px solid var(--line);padding-top:10px"><span class="warn">O jogo atual será substituído (fica uma cópia de segurança).</span><div class="row"><button class="btn danger" data-act="newGameYes">Apagar e recomeçar</button><button class="btn" data-act="newGameNo">Cancelar</button></div></div>`:''}`,UI.confirmNew)}
   </section>`}
 
-function renderPOffers(t){const os=(t.pOffers||[]).filter(o=>P(o.pid)&&P(o.pid).team===t.id&&!isHuman(o.tid));if(!os.length)return '';
+function validPO(t){return (t.pOffers||[]).filter(o=>o.exp>=S.md&&P(o.pid)&&P(o.pid).team===t.id&&!isHuman(o.tid))}
+function decKeys(){const t=myTeam(),mg=me();if(!t||!mg)return [];return [...validPO(t).map(o=>`p${o.pid}:${o.tid}:${o.amount}`),...(mg.offers||[]).filter(o=>!isHuman(o.tid)).map(o=>`j${o.tid}:${S.season}`),
+  ...(t.sOffers||[]).map(o=>`s${o.name}:${S.season}`),...(t.nOffers||[]).map(o=>`n${o.name}:${S.season}`)]}
+function newDec(){const seen=new Set(S.decSeen||[]);return decKeys().filter(k=>!seen.has(k)).length}
+function markDec(){S.decSeen=[...new Set([...(S.decSeen||[]),...decKeys()])].slice(-80)}
+function afterRep(){if(newDec()){const t=myTeam();if(t.sOffers.length)UI.folds.spon=true;if(t.nOffers.length)UI.folds.nr=true;markDec();UI.tab='dec';UI.sheet=null;save();render();window.scrollTo(0,0)}else ACT.paperOpen({i:0})}
+function jobOffersPanel(mg){return mg.offers.length?`<div class="panel stack" style="border-color:var(--info)"><span class="label">Propostas de emprego</span>${mg.offers.map((o,i)=>`<div class="spread"><div class="row">${crest(o.tid,'sm')}<span><b>${esc(T(o.tid).name)}</b><br><span class="muted" style="font-size:13px">${clubInfo(o.tid)}</span></span></div>
+     <div class="row"><button class="btn sm primary" data-act="offerYes" data-i="${i}">Aceitar</button><button class="btn sm" data-act="offerNo" data-i="${i}">Recusar</button></div></div>`).join('')}</div>`:''}
+function renderDec(){const t=myTeam(),mg=me();const po=renderPOffers(t),jo=jobOffersPanel(mg);const deals=t.sOffers.length||t.nOffers.length?renderDeals(t):'';
+  const any=po||jo||deals;
+  return `<section class="stack"><h2 class="h-sec">Decisões</h2>${any?note('Decida aqui mesmo. O que você não responder continua valendo até expirar, e fica no Mercado e no Clube.'):`<div class="panel">${note('Nada pendente agora.')}</div>`}
+    ${po}${jo}${deals}<button class="btn primary big" data-act="decDone">Continuar para o jornal</button></section>`}
+function renderPOffers(t){const os=validPO(t);if(!os.length)return '';
   return `<div class="panel stack" style="border-color:var(--info)"><div class="spread"><span class="label">Propostas pelos seus jogadores</span><span class="muted" style="font-size:12px">valem por 3 datas</span></div>${os.map(o=>{const p=P(o.pid);const i=t.pOffers.indexOf(o);
     return `<div class="offer stack" style="gap:6px"><div style="min-width:0"><b>${p.idol?'<span class="idol">★</span> ':''}${esc(p.name)}</b> <span class="muted" style="font-size:13px">${POSN[p.pos]} · força ${p.str} · ${p.age} anos</span>
-      <div class="muted" style="font-size:14px">${esc(T(o.tid).name)} oferece <b style="color:var(--fg)">${money(o.amount)}</b> · valor de mercado ${money(value(p))}</div></div>
+      <div class="row" style="gap:4px;margin:4px 0">${(t.lineup||[]).includes(p.id)?'<span class="tag" style="background:var(--ok);color:#fff">TITULAR</span>':'<span class="tag">RESERVA</span>'}${p.sale?'<span class="tag yel">À VENDA</span>':''}<span class="muted" style="font-size:13px">${p.rn||0} jogo${p.rn===1?'':'s'}${p.rn?' · nota '+avgR(p):''}${p.g?` · ${p.g} gol${p.g>1?'s':''}`:''}</span></div>
+      <div class="muted" style="font-size:14px">${crest(o.tid,'sm')} ${esc(T(o.tid).name)} oferece <b style="color:${o.amount>=value(p)?'var(--ok)':'var(--fg)'}">${money(o.amount)}</b> · valor de mercado ${money(value(p))} · vale até a data ${o.exp+1}</div></div>
       ${p.idol?'<span class="warn">É ídolo da torcida: vender irrita muito.</span>':''}
       <div class="row"><button class="btn sm primary" data-act="poYes" data-i="${i}" ${t.players.length<=14?'disabled':''}>Aceitar</button><button class="btn sm" data-act="poMore" data-i="${i}" ${o.raised?'disabled':''}>${o.raised?'Já pediu mais':'Pedir mais'}</button><button class="btn sm" data-act="poNo" data-i="${i}">Recusar</button></div></div>`}).join('')}</div>`}
 function loanStatus(L,k){const l=L.late||0;if(!l)return '<span style="color:var(--ok)">Em dia</span>';
@@ -2013,8 +2026,8 @@ function matchAnalysis(R,t){const m=R.match;const me=m.h===t.id?'h':'a',op=me===
   // classificação
   let cls='';if(m.comp==='L'&&R.posB!=null&&R.table){const pa=R.table.findIndex(r=>r[0]===t.id);const d=R.posB-pa;cls=`<span class="label" style="margin-top:6px">Classificação</span><div style="font-size:14px">${R.posB+1}º → <b>${pa+1}º</b> ${d>0?`<span class="up">▲ subiu ${d}</span>`:d<0?`<span class="dn">▼ caiu ${-d}</span>`:'(manteve)'} · ${R.table[pa][1]} pts</div>`}
   return `<div class="panel stack"><span class="label">Estatísticas da partida</span>${stats}
-    <span class="label" style="margin-top:6px">Leitura do jogo</span><ul class="news" style="margin:0">${obs.map(o=>`<li>${o}</li>`).join('')}</ul>${subH}${fit}${cls}
-    ${note('Posse e finalizações são calculadas minuto a minuto pelo motor; os gols saem dessas finalizações.')}</div>`}
+    <span class="label" style="margin-top:6px">Leitura do jogo</span><ul class="news" style="margin:0">${obs.slice(0,3).map(o=>`<li>${o}</li>`).join('')}</ul></div>
+    ${subH||fit||cls||obs.length>3?fold('posAna','Substituições, condição e classificação',avg!=null?`<span class="muted" style="font-size:13px">condição ${avg}%</span>`:'','',`${obs.length>3?`<ul class="news" style="margin:0">${obs.slice(3).map(o=>`<li>${o}</li>`).join('')}</ul>`:''}${subH}${fit}${cls}${note('Posse e finalizações são calculadas minuto a minuto pelo motor; os gols saem dessas finalizações.')}`):''}`}
 function renderPos(){
   const t=myTeam();const R=S.rep&&S.rep[t.id];
   if(!R)return renderJogo();
@@ -2037,15 +2050,23 @@ function renderPos(){
   const st=[...(R.nt||[]).map(pid=>`<li><span class="tag" style="background:var(--ok);color:#fff">SELEÇÃO</span> ${nm(pid)} convocado; desfalca a próxima data</li>`),...R.inj.map(([pid,n])=>`<li><span class="tag inj">LES</span> ${nm(pid)} fora por ${n} data${n>1?'s':''}</li>`),
     ...R.susp.map(([pid,n,why])=>`<li><span class="tag sus">SUSP</span> ${nm(pid)} suspenso por ${n} data${n>1?'s':''} (${why})</li>`),
     ...R.evo.map(([pid,d])=>`<li><span class="tag" style="background:${d>0?'var(--ok)':'var(--danger)'};color:#fff">${d>0?'▲ +'+d:'▼ '+d}</span> ${nm(pid)} ${d>0?'evoluiu':'caiu de rendimento'} · força ${P(pid)?P(pid).str:'—'}</li>`)];
-  const sts=fold('posSt','Lesões, suspensões e evolução',`<span class="muted">${st.length||'nada'}</span>`,'',st.length?`<ul class="news">${st.join('')}</ul>`:'<p class="muted" style="margin:0">Nada a relatar. A evolução é avaliada a cada 3 datas.</p>',st.length>0);
+  const sts0=fold('posSt','Lesões, suspensões e evolução',`<span class="muted">${st.length||'nada'}</span>`,'',st.length?`<ul class="news">${st.join('')}</ul>`:'<p class="muted" style="margin:0">Nada a relatar. A evolução é avaliada a cada 3 datas.</p>',st.length>0);
   const pos=R.table.findIndex(r=>r[0]===t.id);const lo=clamp(pos-2,0,R.table.length-5);
   const tb=`<div class="panel stack"><div class="spread"><span class="label">${DIVN[R.div]}</span><span class="muted" style="font-size:13px">${pos+1}º lugar${R.dconf!=null?` · diretoria ${R.dconf>0?'+':''}${R.dconf} (${R.conf}/100)`:''}</span></div>
     <div class="tbl-wrap"><table class="tbl"><tbody>${R.table.slice(lo,lo+5).map((r,k)=>`<tr class="${isHuman(r[0])?'me':''}"><td>${lo+k+1}</td><td class="team"><div>${crest(r[0],'sm')}${esc(T(r[0]).name)}</div></td><td class="pts">${r[1]} pts</td><td>${r[2]} J</td><td>${r[3]>0?'+':''}${r[3]}</td></tr>`).join('')}</tbody></table></div>${R.mood!=null?`<span class="muted" style="font-size:13px">Torcida ${moodLabel(R.mood).toLowerCase()} · ${R.mood}/100${R.dmood?` (${R.dmood>0?'+':''}${R.dmood})`:''}</span>`:''}${R.confParts&&R.confParts.length?note('Diretoria: '+R.confParts.map(([l,v])=>`${l} ${sgn(v)}`).join(' · ')+` = ${sgn(R.confParts.reduce((s,x)=>s+x[1],0))}`):''}</div>`;
   const offs=[...R.offers];if(t.sOffers.length)offs.push('Patrocinadores aguardam sua escolha.');if(t.nOffers.length&&!R.offers.some(o=>o.startsWith('Empresas')))offs.push('Há propostas de naming rights pendentes.');
-  const of=offs.length?`<div class="panel stack" style="border-color:var(--info)"><span class="label">Propostas</span><ul class="news">${offs.map(o=>`<li>${esc(o)}</li>`).join('')}</ul><div class="row"><button class="btn sm" data-act="tab" data-t="clube">Ver no Clube</button>${(t.pOffers||[]).length?'<button class="btn sm" data-act="tab" data-t="mercado">Ver no Mercado</button>':''}</div></div>`:'';
+  const of0=offs.length?`<div class="panel stack" style="border-color:var(--info)"><span class="label">Propostas</span><ul class="news">${offs.map(o=>`<li>${esc(o)}</li>`).join('')}</ul><div class="row"><button class="btn sm" data-act="tab" data-t="clube">Ver no Clube</button>${(t.pOffers||[]).length?'<button class="btn sm" data-act="tab" data-t="mercado">Ver no Mercado</button>':''}</div></div>`:'';
   const voices=R.voices&&R.voices.length?`<div class="panel stack voice"><span class="label">Voz da arquibancada</span>${R.voices.map(v=>v.startsWith('✓')?`<p class="q ok">${esc(v)}</p>`:`<p class="q">${esc(v)}</p>`).join('')}</div>`:'';
-  return `<section class="stack"><h2 class="h-sec">Relatório da data</h2>${riskBanner()}${head}${ana}${voices}${pressPanel(R)}${of}${rat}${fin}${sts}${tb}
-    <button class="btn primary big" data-act="paperOpen" data-i="0">Ler o jornal da rodada</button>${S.over?`<button class="btn big" data-act="endSeason">Ver resumo da temporada</button>`:''}</section>`}
+  const tbF=fold('posTb',`${DIVN[R.div]}`,`<b>${pos+1}º</b>`,'',tb.replace('<div class="panel stack">','<div class="stack">')+voices.replace('panel stack voice','stack voice'));
+  const resumo=`<div class="panel stack"><span class="label">Resumo</span>
+    <div class="spread"><span>${DIVN[R.div]}</span><b>${pos+1}º · ${R.table[pos]?R.table[pos][1]:0} pts</b></div>
+    ${R.dconf!=null?`<div class="spread"><span>Diretoria</span><b>${R.dconf>0?'+':''}${R.dconf} (${R.conf}/100)</b></div>`:''}
+    ${R.mood!=null?`<div class="spread"><span>Torcida</span><b>${moodLabel(R.mood)} ${R.dmood?`(${R.dmood>0?'+':''}${R.dmood})`:''}</b></div>`:''}
+    <div class="spread"><span>Dinheiro da data</span><b>${money1(tot)}</b></div>
+    ${st.length?`<ul class="news" style="margin:4px 0 0">${st.join('')}</ul>`:''}</div>`;
+  const nd=newDec();
+  return `<section class="stack"><h2 class="h-sec">Relatório da data</h2>${riskBanner()}${head}${ana}${resumo}${pressPanel(R)}${rat}${fin}${tbF}
+    <button class="btn primary big" data-act="repDone">${nd?`Ver decisões (${nd})`:'Ler o jornal da rodada'}</button>${S.over?`<button class="btn big" data-act="endSeason">Ver resumo da temporada</button>`:''}</section>`}
 
 /* ---------- ao vivo ---------- */
 function evText(ev){const p=P(ev.pid);const n=p?esc(p.name):'—';
@@ -2378,7 +2399,9 @@ const ACT={
   liveForm(d){const t=T(+d.tid);t.formSel=d.v;const m=UI.live.ms.find(x=>x.h.tid===t.id||x.a.tid===t.id);const X=m.h.tid===t.id?m.h:m.a;X.slot=assignSlots(X.on,fArr(d.v));save();render()},
   skip(){const L=UI.live;clearTimeout(L.timer);L.paused=false;let r,g=0;while(g++<600){r=advance();if(r)break}if(r==='end')endLive();else render()},
   liveTac(d){T(+d.tid).tactic=d.v;render()},
-  liveDone(){UI.live=null;UI.tab='pos';render();window.scrollTo(0,0)},
+  liveDone(){UI.live=null;const t=myTeam();const R=t&&S.rep&&S.rep[t.id];if(R&&!R.match&&!S.over&&!(R.press&&R.press.done==null)){afterRep();return}UI.tab='pos';render();window.scrollTo(0,0)},
+  repDone(){afterRep()},
+  decDone(){ACT.paperOpen({i:0})},
   endSeason(){if(!S.over||S.summary)return;endSeason();render();window.scrollTo(0,0)},
   summaryOk(){S.summary=null;save();UI.tab=S.managers[UI.cur]?.fired?'jogo':(S.managers[UI.cur]?.offers.length||myTeam()?.sOffers.length?'clube':'jogo');render();window.scrollTo(0,0)},
   job(d){takeJob(me(),+d.tid);UI.tab='jogo';render()},
