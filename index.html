@@ -206,10 +206,14 @@ details.hf>summary::-webkit-details-marker{display:none}
 .finrow{display:grid;grid-template-columns:1fr auto;gap:3px 8px;font-size:14px;align-items:baseline}
 .finbar{grid-column:1/-1;height:6px;border-radius:3px;background:var(--surface2);overflow:hidden}
 .finbar i{display:block;height:100%;border-radius:3px;opacity:.75}
-.matchinfo{position:relative;z-index:1;display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:12px;text-align:center}
-.matchinfo>div{background:rgba(0,0,0,.18);border-radius:10px;padding:6px 4px;display:flex;flex-direction:column;gap:3px;align-items:center}
+.matchinfo{position:relative;z-index:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:12px;text-align:center}
+.matchinfo>div{background:rgba(8,40,22,.82);border-radius:10px;padding:7px 4px;display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:center;min-width:0}
+.matchinfo>.wide{grid-column:1/-1}
+.matchinfo b.sm{font:600 13px var(--body);line-height:1.3}
+.matchinfo>div>b{white-space:nowrap}.matchinfo b.mid{white-space:normal;font-size:14px;line-height:1.15}.matchinfo .muted{text-transform:none;letter-spacing:0;font:500 13px var(--body)}.matchinfo>.wide>b{white-space:normal}
 .matchinfo span{font:600 10.5px var(--display);letter-spacing:.06em;text-transform:uppercase;opacity:.85}
 .matchinfo b{font:800 16px var(--display)}
+.matchinfo span{line-height:1.15}
 .matchinfo .muted{color:inherit;opacity:.85;font-size:12px}
 .formc{display:inline-flex;gap:3px}.formc i{font:800 12px var(--display);font-style:normal;min-width:26px;padding:2px 0 1px;border-radius:5px;display:inline-flex;flex-direction:column;align-items:center;line-height:1.1;color:#fff}.formc i small{font:600 8.5px var(--display);opacity:.9;letter-spacing:.02em}
 .formc .fV{background:#1e8a4c}.formc .fE{background:#6b746f}.formc .fD{background:#c0392b}
@@ -1270,7 +1274,7 @@ function renderJogo(){
       <div class="x">×</div>
       <div class="side">${crest(fx.a,'lg')}<b>${esc(T(fx.a).name)}</b><small>${oppInfo(fx.e,fx.a)}</small></div></div>
      ${KO.has(fx.e.t)?'<p style="position:relative;z-index:1;margin:8px 0 0;text-align:center;font-size:13px">Mata-mata: empate leva à prorrogação e aos pênaltis.</p>':''}
-     <div class="matchinfo"><div><span>Mando</span><b>${fx.neutral?'Neutro':home?'Em casa':'Fora'}</b></div><div><span>Últimos 5 jogos deles</span>${formChips(T(opp))}</div><div><span>Retrospecto</span><b style="font-size:13px">${h2hTxt(t,opp)}</b></div>${T(opp).coach?`<div style="grid-column:1/-1"><span>Técnico deles</span><b style="font-size:13px;font-weight:600">${coachTxt(T(opp).coach)}</b></div>`:''}<div><span>Gols esperados*</span><b class="num">${home?fx1(xg[0])+' × '+fx1(xg[1]):fx1(xg[1])+' × '+fx1(xg[0])}</b></div></div></div>
+     <div class="matchinfo"><div><span>Mando</span><b>${fx.neutral?'Neutro':home?'Em casa':'Fora'}</b></div><div><span>Retrospecto</span><b class="mid">${h2hTxt(t,opp)}</b></div><div><span>Gols esperados*</span><b class="num">${home?fx1(xg[0])+' × '+fx1(xg[1]):fx1(xg[1])+' × '+fx1(xg[0])}</b></div><div class="wide"><span>Últimos 5 jogos deles</span>${formChips(T(opp))}</div>${T(opp).coach?`<div class="wide"><span>Técnico deles</span><b class="sm">${coachTxt(T(opp).coach)}</b></div>`:''}</div></div>
    ${(()=>{const [w,d,l]=outcomeP(xg[0],xg[1]);const pc=v=>Math.round(v*100)+'%';const ko=KO.has(fx.e.t);
      return `<div class="panel stack"><div class="spread"><span class="label">Chance estimada</span><span class="muted" style="font-size:12px">${ko?'empate leva à prorrogação':'no tempo normal'}</span></div>
       <div class="probbar" role="img" aria-label="Vitória ${pc(w)}, empate ${pc(d)}, derrota ${pc(l)}"><i style="width:${w*100}%;background:var(--ok)"></i><i style="width:${d*100}%;background:var(--muted)"></i><i style="width:${l*100}%;background:var(--danger)"></i></div>
