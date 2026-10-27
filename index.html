@@ -433,7 +433,7 @@ const FACCOST=[8e5,1.5e6,3e6,6e6,12e6];
 const facCost=(t,l)=>r1k(FACCOST[l]*[6,3,1.5,1][t.div]);
 const facMaint=t=>['ct','dm','base'].reduce((s,k)=>s+Math.round(Math.pow(t.fac[k],1.5)*8e3*[8,4,2,1,1,1][t.div]),0);
 const capOf=t=>t.cap-(t.stWork?1500:0);
-const seatCost=t=>r1k(2000*(1500+t.cap/20));
+const seatCost=t=>r1k(5000*(1500+t.cap/20));
 const TRAINN={N:'Normal',F:'Físico',T:'Tático',A:'Ataque',D:'Defesa'};
 const DIFF={F:{n:'Fácil',inc:1,wage:1,ai:.5,board:.8,cash:1.5,deal:.9},N:{n:'Normal',inc:1,wage:1,ai:1,board:1,cash:1,deal:1},D:{n:'Difícil',inc:1,wage:1,ai:1.6,board:1.2,cash:.7,deal:1.1}};
 const dff=()=>DIFF[(S&&S.diff)||'N'];
@@ -483,7 +483,8 @@ let UI={prefs:Object.assign({speed:2,stopHT:true,others:'all',evts:'all',pens:'a
 function ageF(a){return a<=21?1.35:a<=25?1.15:a<=29?1:a<=31?.72:a<=33?.48:.3}
 function value(p){return Math.max(20000,Math.round(1e6*Math.pow(p.str/50,6)*ageF(p.age)*(1+Math.min(.3,(p.caps||0)*.02))*(S&&p.artS!=null&&S.season-p.artS<=1?1.1:1)/1000)*1000)}
 function wage(p){return wageFor(p,p.team!=null&&S.teams[p.team]?S.teams[p.team]:null)}
-function wageFor(p,t){return Math.round(Math.max(1500,40000*Math.pow(p.str/64,8)*(t?[1,.65,.4,.25,1,.15][t.div]:1))*(p.age>=33?.85:1)*(p.age<=23&&p.pot>=p.str+12?1.15:1)/100)*100}
+const wCurve=s=>s<=85?40000*Math.pow(s/64,8):40000*Math.pow(85/64,8)*Math.pow(1.05,s-85);
+function wageFor(p,t){return Math.round(Math.max(1500,wCurve(p.str)*(t?[1,.65,.4,.25,1,.15][t.div]:1))*(p.age>=33?.85:1)*(p.age<=23&&p.pot>=p.str+12?1.15:1)/100)*100}
 function makePlayer(pos,base,tid,young){
   const id='p'+(S.nextPid++);
   const age=young?ri(17,19):ri(18,34);
@@ -872,7 +873,8 @@ const CUPTV=[1.5e5,3e5,6e5,1.2e6,2.5e6],CUPTVD=[1,.7,.45,.3,1,.3];
 const BLOC={A:{n:'Liga Audiência',fix:.40,aud:.30,perf:.30,d:'Paga mais a quem tem audiência. Melhor para clubes de torcida grande.'},B:{n:'Liga União',fix:.45,aud:.25,perf:.30,d:'Divisão mais igual entre os clubes. Permite vender 20% da cota a um investidor.'}};
 const blocOf=t=>BLOC[(t&&t.bloc)||'A'];const tvCut=t=>t&&t.tvInv?.8:1;
 const invVal=t=>r1k(TV[Math.min(t.div,3)]*NL()*.2*3);
-function tvFor(t,pos){const b=blocOf(t);return r1k(TV[t.div]*(b.fix+b.aud*audRel(t)+b.perf*tvW(pos,tabOf(t).length))*tvCut(t))}
+const grTV=t=>t&&t.div===0&&!t.foreign?[1,1,1,1,1.3,1.6][grOf(t)]||1:1;
+function tvFor(t,pos){const b=blocOf(t);return r1k(TV[t.div]*((b.fix+b.aud*audRel(t))*grTV(t)+b.perf*tvW(pos,tabOf(t).length))*tvCut(t))}
 const eligibleNR=t=>t.div<=2||t.cap>=12000;
 const SPT={est:['Estável','Paga bem no Nacional e pouco no resto. O mais seguro.'],reg:['Regional','Paga mais no estadual e dá bônus pelo título estadual.'],
   cup:['Copeiro','Paga pouco por jogo, mas dá bônus a cada fase passada na Copa e pelo título continental.'],int:['Internacional','Para quem disputa a Continental: paga muito nos jogos de lá.']};
@@ -1036,7 +1038,7 @@ function finishMatchday(){applyFmt();
       {const ck=CK(m.comp);const rr=f>c?'V':f<c?'D':(m.pens?(m.pens[sd===m.h?0:1]>m.pens[sd===m.h?1:0]?'V':'D'):'E');(t.last=t.last||[]).push([rr,ck,!!m.pens]);if(t.last.length>5)t.last.shift()}
       if(isHuman(t.id)){const o=sd===m.h?m.a.tid:m.h.tid;const hr=(t.h2h=t.h2h||{})[o]||(t.h2h[o]=[0,0,0]);hr[f>c?0:f===c?1:2]++}
       if(!t.foreign&&t.div<5||(!t.foreign&&CK(m.comp)==='E')){const ck=CK(m.comp);const o=T(sd===m.h?m.a.tid:m.h.tid);const big=!o.foreign&&audF(o)>=1.25?1.15:1;const dv=t.div;
-        if(ck==='L')credit(t,'tvA',r1k(TV[dv]*blocOf(t).aud*audRel(t)*(m.derby?1.5:1)*big*tvCut(t)));
+        if(ck==='L')credit(t,'tvA',r1k(TV[dv]*blocOf(t).aud*audRel(t)*(m.derby?1.5:1)*big*tvCut(t)*grTV(t)));
         else if(ck==='E')credit(t,'tvA',r1k(TVB[dv]*.3*audF(t)*(m.derby?1.5:1)*big*(m.comp==='ES'?1.6:m.comp==='EF'?2.2:1)));
         else if(ck==='C')credit(t,'tvC',r1k(CUPTV[S.cal[S.md]&&S.cal[S.md].s!=null?S.cal[S.md].s:0]*CUPTVD[t.div]));
         else if(ck==='K'||ck==='M')credit(t,'tvC',ck==='M'?3e6:1.5e6)}
@@ -1068,7 +1070,7 @@ function finishMatchday(){applyFmt();
   if(e.t==='K'&&e.r===0)S.kParts.forEach(id=>{if(!T(id).foreign)credit(T(id),'cont',15e6)});
   if(e.t==='M0'&&S.kchamp!=null&&!T(S.kchamp).foreign)credit(T(S.kchamp),'mund',2e7);
   if(e.t==='L')for(let d=0;d<4;d++)standings(d).forEach((t,i)=>{
-    credit(t,'tv',r1k(TV[t.div]*blocOf(t).fix*tvCut(t)));
+    credit(t,'tv',r1k(TV[t.div]*blocOf(t).fix*tvCut(t)*grTV(t)));
     if(t.spon&&!t.spon.v2){credit(t,'spon',t.spon.perData);if(t.spon.perWin&&res[t.id]?.r==='V')credit(t,'spon',t.spon.perWin)}});
   {const pl={};for(const m of L.ms)for(const X of [m.h,m.a])X.played.forEach((id,i)=>pl[id]=i<11?(T(X.tid).style==='H'?14:11):4);
     for(const p of Object.values(S.players)){if(p.team==null)continue;const tt=T(p.team);const bonus=(tt.fac?tt.fac.ct+tt.fac.dm:0)+(tt.train==='F'?5:0);p.fit=clamp((p.fit??100)-(pl[p.id]||0)+7+(pl[p.id]?Math.floor(bonus/2):7+bonus),35,100)}}
@@ -1081,7 +1083,7 @@ function finishMatchday(){applyFmt();
       if(q){releaseFree(q);if(H)t.lineup=t.lineup.filter(i=>i!==q.id);news(`Com salários atrasados, ${q.name} consegue rescisão na Justiça e deixa o ${t.name} de graça.`,H?[t.id]:undefined)}}});
   if(e.t==='L')S.teams.forEach(t=>{if(!t.foreign&&t.fac){const mt=facMaint(t);if(mt)credit(t,'fac',-mt)}});
   S.teams.forEach(t=>{if(t.works){t.works.left--;if(t.works.left<=0){t.fac[t.works.k]++;if(isHuman(t.id))news(`Obra concluída: ${FACN[t.works.k][0]} no nível ${t.fac[t.works.k]}.`,[t.id]);t.works=null}}
-    if(t.stWork){t.stWork.left--;if(t.stWork.left<=0){t.cap=Math.min(80000,t.cap+2000);t.stWork=null;if(isHuman(t.id))news(`Ampliação concluída: o estádio agora tem ${t.cap.toLocaleString('pt-BR')} lugares.`,[t.id])}}});
+    if(t.stWork){t.stWork.left--;if(t.stWork.left<=0){t.cap=Math.min(80000,t.cap+5000);t.stWork=null;if(isHuman(t.id))news(`Ampliação concluída: o estádio agora tem ${t.cap.toLocaleString('pt-BR')} lugares.`,[t.id])}}});
   if(e.t==='L')S.teams.forEach(t=>{loanTick(t,'loan');loanTick(t,'floan')});
   if(S.md%6===5)evolve().forEach(([pid,d])=>{const Rp=rep[P(pid).team];if(Rp)Rp.evo.push([pid,d])});
   S.managers.forEach(mg=>{if(mg.out||mg.fired)return;const t=T(mg.team),r=res[t.id];const parts=[];
@@ -1213,8 +1215,8 @@ function endSeason(){
   S.teams.forEach(t=>{if(t.foreign||!t.gr)return;if(t.gr0==null)t.gr0=t.gr;let pts=[3,1,0,-.5,0,-1][t.div]||0;
     if(sum.champs[t.div]===t.id)pts+=t.div===0?6:t.div===1?3:2;if(sum.cup===t.id)pts+=4;if(S.kchamp===t.id)pts+=6;if(S.mchamp===t.id)pts+=8;if(sum.est&&sum.est.includes(t.id))pts+=1;
     if(sum.up.includes(t.id))pts+=2;if(sum.down.includes(t.id)||(sum.out||[]).includes(t.id))pts-=2;
-    t.prest=Math.round(((t.prest||0)*.8+pts)*10)/10;const top=t.gr0>=5?5:Math.max(t.gr0,4);
-    const ng=clamp(t.gr0+(t.prest>=24?2:t.prest>=12?1:0)-(t.prest<=-6?1:0),Math.max(1,t.gr0-1),top);
+    t.prest=Math.round(((t.prest||0)*.8+pts)*10)/10;const top=t.gr0>=5||t.prest>=24?5:4;
+    const ng=clamp(t.gr0+(t.prest>=40?3:t.prest>=24?2:t.prest>=12?1:0)-(t.prest<=-6?1:0),Math.max(1,t.gr0-1),top);
     if(ng!==t.gr){const up=ng>t.gr;t.gr=ng;news(up?`A torcida do ${t.name} cresce: o clube agora tem torcida ${GRN[ng].toLowerCase()}.`:`Sem bons resultados, a torcida do ${t.name} encolhe: agora é ${GRN[ng].toLowerCase()}.`,isHuman(t.id)?[t.id]:[])}});
   S.teams.forEach(t=>{if(t.spon&&t.spon.bonus&&(sum.up.includes(t.id)||sum.champs.includes(t.id))){credit(t,'spon',t.spon.bonus);if(isHuman(t.id))news(`${t.spon.name} pagou o bônus de ${money(r1k(t.spon.bonus*dff().inc))} pela campanha.`,[t.id])}});
   S.managers.forEach(mg=>{if(mg.out||mg.fired)return;const t=T(mg.team);const pos=tabOf(t).findIndex(x=>x.id===t.id);
@@ -1754,7 +1756,9 @@ function coachMoves(e,rep){if(e.t!=='L')return;let n=0;
     if(h.length>=4&&h.slice(-4).every(r=>r==='D')){ch+=.3;why=why||'após 4 derrotas seguidas'}
     if(pos-ex>=3&&tb.j>=7){ch+=.12;why=why||'pela campanha abaixo do esperado'}
     if(ch&&Math.random()<ch*[1.4,1.2,1,.85][t.div]){fireCoach(t,why,rep);n++}}}
-function aiInvest(){for(const t of S.teams){if(t.foreign||isHuman(t.id)||t.div>=4||t.works||!t.fac||inDebt(t))continue;const cap=[5,4,3,2][t.div];
+function aiInvest(){for(const t of S.teams){if(t.foreign||isHuman(t.id)||t.div>=4||inDebt(t))continue;
+  if(!t.stWork&&t.cap<80000&&attEst(t,PRICE[t.div])>=t.cap*.97&&t.cash-seatCost(t)>=CASH[t.div]*.6&&Math.random()<.3){t.cash-=seatCost(t);t.stWork={left:8};news(`${t.name} começa a ampliar o estádio.`);continue}
+  if(t.works||!t.fac)continue;const cap=[5,4,3,2][t.div];
   const ks=['ct','dm','base'].filter(k=>t.fac[k]<cap).sort((a,b)=>t.fac[a]-t.fac[b]);if(!ks.length)continue;const k=ks[0];const c=facCost(t,t.fac[k]);
   if(t.cash-c<CASH[t.div]*.6||Math.random()>.35)continue;t.cash-=c;t.works={k,left:4+2*t.fac[k]};news(`${t.name} inicia obra: ${FACN[k][0].toLowerCase()} rumo ao nível ${t.fac[k]+1}.`)}}
 function buildPaper(e,ms,rep,humans){const nb=S._nb||[];const C=[];
@@ -2058,7 +2062,10 @@ function renderClube(){
       <span class="label">Lances no seu jogo</span>${sg('evts',[['all','Tudo'],['goals','Só gols']])}
       <span class="label">Pênaltis</span>${sg('pens',[['anim','Cobrança a cobrança'],['result','Só o resultado']])}
       ${note('Durante o jogo, toque em Pausar para substituir ou mudar a formação. A postura muda com um toque, sem pausar.')}`)})()}
-   ${(UI.cv||'fin')!=='ger'?'':fold('torc','Torcida',`<b style="color:${mc}">${moodLabel(t.mood)} · ${Math.round(t.mood)}</b>`,meter(t.mood,mc,'Humor da torcida'),note(`Torcida <b>${GRN[grOf(t)].toLowerCase()}</b>. Público potencial de ${t.fans.toLocaleString('pt-BR')} por jogo (com ingresso no preço padrão e humor neutro); ele nunca fica abaixo de ${GRFLOOR[grOf(t)].toLocaleString('pt-BR')}, e volta aos poucos ao tamanho natural do clube. ${(()=>{const g0=t.gr0??grOf(t);const top=g0>=5?5:Math.max(g0,4);const pr=t.prest||0;return grOf(t)<top?`<br>Prestígio ${String(pr).replace('.',',')}: com ${pr>=12?24:12} pontos a torcida vira <b>${GRN[Math.min(top,grOf(t)+1)].toLowerCase()}</b>. Cada temporada na Série A vale 3 pontos, na B 1; títulos, Copa e Continental valem muito mais. O prestígio perde 20% a cada temporada.`:grOf(t)>=5?'<br>Torcida gigante: o máximo.':'<br>Este clube já está no maior nível de torcida que pode alcançar.'})()}<br>Vitórias, ingresso barato e reforços animam; derrotas, ingresso caro e vender os melhores irritam. Casa cheia dá até +14% de força.`))}
+   ${(UI.cv||'fin')!=='ger'?'':fold('torc','Torcida',`<b style="color:${mc}">${moodLabel(t.mood)} · ${Math.round(t.mood)}</b>`,meter(t.mood,mc,'Humor da torcida'),note(`Torcida <b>${GRN[grOf(t)].toLowerCase()}</b>. Público potencial de ${t.fans.toLocaleString('pt-BR')} por jogo (com ingresso no preço padrão e humor neutro); ele nunca fica abaixo de ${GRFLOOR[grOf(t)].toLocaleString('pt-BR')}, e volta aos poucos ao tamanho natural do clube. ${(()=>{const g0=t.gr0??grOf(t);const g=grOf(t);const pr=t.prest||0;const d=g-g0;const ps=String(pr).replace('.',',');
+  if(g>=5)return '<br>Torcida gigante: o máximo.';
+  const nx=GRN[g+1].toLowerCase();const need=g+1===5&&g0<5?Math.max(24,[12,24,40][Math.max(0,d)]||40):[12,24,40][d];const txt=d<0?`com prestígio acima de −6 a torcida volta a ser <b>${nx}</b>`:d>=3?'':`com ${need} pontos a torcida vira <b>${nx}</b>`;
+  return txt?`<br>Prestígio ${ps}: ${txt}. Cada temporada na Série A vale 3 pontos, na B 1; títulos, Copa e Continental valem muito mais. O prestígio perde 20% a cada temporada, então só campanhas seguidas fazem a torcida crescer.`:'<br>Este clube já está no maior nível de torcida que pode alcançar.'})()}<br>Vitórias, ingresso barato e reforços animam; derrotas, ingresso caro e vender os melhores irritam. Casa cheia dá até +14% de força.`))}
    ${(UI.cv||'fin')!=='fin'?'':renderPrizes(t)+renderTV(t)+renderDeals(t)}
    ${(UI.cv||'fin')!=='est'?'':fold('fac','Estrutura',`<span class="muted">nível ${t.fac.ct+t.fac.dm+t.fac.base} de 15</span>`,'',`${t.works?`<div class="panel" style="border-color:var(--info)">${note(`Obra em andamento: ${FACN[t.works.k][0]} para o nível ${t.fac[t.works.k]+1}. Faltam ${t.works.left} data${t.works.left>1?'s':''}.`)}</div>`:''}${Object.entries(FACN).map(([k,[n,d]])=>{const l=t.fac[k];const c=facCost(t,l);return `<div class="offer stack" style="gap:4px"><div class="spread"><b>${n}</b><span class="lvl" aria-label="Nível ${l} de 5">${[0,1,2,3,4].map(i=>`<i class="${i<l?'on':''}"></i>`).join('')}</span></div>${note(d)}${k==='base'?`<span style="font-size:13px">${l?`Próxima revelação: <b>fim da temporada ${S.season}</b> · 1 ou 2 jovens com força em torno de <b>${BASE[t.div]-6+2*l}</b>${l<5?` (no nível ${l+1}: ${BASE[t.div]-4+2*l})`:''}.${t.players.length>=26?' <span class="warn">Elenco cheio (26): não haverá vaga.</span>':''}`:'<span class="warn">Nível 0: a base não revela jogadores.</span>'}</span>`:''}${l<5?`<button class="btn sm" data-act="facUp" data-k="${k}" style="align-self:flex-start" ${t.cash>=c&&!t.works?'':'disabled'}>Melhorar para nível ${l+1} · ${money(c)} · ${4+2*l} datas</button>${note(`Paga agora ${money(c)}; depois da obra, a manutenção do clube passa de ${money(facMaint(t))} para ${money(facMaint({...t,fac:{...t.fac,[k]:l+1}}))} por rodada do Nacional.`)}`:note('Nível máximo.')}</div>`}).join('')}${note(`Uma obra por vez. O custo sobe nas séries mais altas. Manutenção: ${money(facMaint(t))} por rodada do Nacional, e cresce a cada nível.`)}`)}
    ${(UI.cv||'fin')!=='ger'?'':fold('troph','Sala de troféus',`<span class="muted">${t.troph.length}</span>`,'',t.troph.length?`<div class="troph">${t.troph.slice().reverse().map(x=>`<div>${trophIcon()}<b>${esc(x.n)}</b><small>Temporada ${x.s}</small></div>`).join('')}</div>`:note('Nenhum título ainda. Estaduais, Nacional, Copa, Continental e Mundial aparecem aqui.'))}
@@ -2072,7 +2079,7 @@ function renderClube(){
       ${note('Clubes: '+(mg.career||[]).map(c=>`${esc(c.name)} (desde T${c.from})`).join(' · '))}${mg.titles.length?note('Títulos: '+mg.titles.map(esc).join(', ')):''}${note('Recordes, temporadas e retrospectos contam a partir das versões em que foram criados.')}`)})()}
    ${(UI.cv||'fin')!=='est'?'':fold('est','Estádio',`<b>${t.cap.toLocaleString('pt-BR')} lugares</b>`,`<span class="muted" style="font-size:13px">${esc(t.stadium)} · ingresso R$ ${t.price}</span>`,`
      <div class="spread"><div><span class="label">Último público</span><div style="font:800 24px var(--display)" class="num">${t.lastGate?t.lastGate.toLocaleString('pt-BR'):'—'}</div></div>
-       ${t.cap>=80000?note('Capacidade máxima: 80 mil lugares.'):t.stWork?note(`Obra de ampliação: faltam ${t.stWork.left} datas. 1.500 lugares fechados.`):`<button class="btn" data-act="expand" ${t.cash<seatCost(t)?'disabled':''}>Ampliar +2.000 · ${money(seatCost(t))} · 8 datas</button>`}</div>
+       ${t.cap>=80000?note('Capacidade máxima: 80 mil lugares.'):t.stWork?note(`Obra de ampliação: faltam ${t.stWork.left} datas. 1.500 lugares fechados.`):`<button class="btn" data-act="expand" ${t.cash<seatCost(t)?'disabled':''}>Ampliar +${Math.min(5000,80000-t.cap).toLocaleString('pt-BR')} · ${money(seatCost(t))} · 8 datas</button>`}</div>
      ${(()=>{const h=t.attH||[];const avg=h.length?Math.round(h.reduce((a,b)=>a+b,0)/h.length):null;const nd=t.div===0?null:t.div>=5?3:t.div-1;const nat=natFans(t),natN=nd!=null?natFans({...t,div:nd}):null;
        return `<div class="stat-grid"><div><span class="label">Lotação média</span><b class="num" style="color:${avg==null?'var(--muted)':avg>=90?'var(--ok)':'var(--fg)'}">${avg==null?'—':avg+'%'}</b><small class="muted">${h.length?`últimos ${h.length} jogos em casa`:'ainda sem jogos em casa'}</small></div>
          <div><span class="label">Público potencial</span><b class="num">${t.fans.toLocaleString('pt-BR')}</b><small class="muted">hoje, por jogo</small></div>
@@ -2769,7 +2776,7 @@ const ACT={
   tmodeGo(d){UI.tab='tabela';UI.tmode=d.v;if(myTeam())UI.tdiv=myTeam().div;render();window.scrollTo(0,0)},
   tmode(d){UI.tmode=d.m;if(d.m==='liga'&&myTeam())UI.tdiv=myTeam().div;render()},
   price(d){const t=myTeam();t.price=clamp(t.price+ +d.d,1,300);save();render()},
-  expand(){const t=myTeam();const c=seatCost(t);if(t.cash<c||t.stWork||t.cap>=80000)return;t.cash-=c;book(t,'works',-c);t.stWork={left:8};news(`Obra de ampliação iniciada: +2.000 lugares em 8 datas.`,[t.id]);save();render();toast('Obra iniciada')},
+  expand(){const t=myTeam();const c=seatCost(t);if(t.cash<c||t.stWork||t.cap>=80000)return;t.cash-=c;book(t,'works',-c);t.stWork={left:8};news(`Obra de ampliação iniciada: +${Math.min(5000,80000-t.cap).toLocaleString('pt-BR')} lugares em 8 datas.`,[t.id]);save();render();toast('Obra iniciada')},
   offerYes(d){const mg=me();const o=mg.offers[+d.i];if(!o||isHuman(o.tid)){toast('Proposta indisponível.');return}takeJob(mg,o.tid);UI.tab='jogo';render()},
   offerNo(d){const mg=me();const o=mg.offers[+d.i];mg.offers.splice(+d.i,1);if(o&&T(o.tid).div<=T(mg.team).div){mg.conf=clamp(mg.conf+3,0,100);news(`${mg.name} recusa proposta do ${T(o.tid).name} e ganha pontos com a diretoria.`,[mg.team])}else if(o)news(`${mg.name} recusa a proposta do ${T(o.tid).name} e fica no ${T(mg.team).name}.`,[mg.team]);save();render()},
   play(){const w=playWarnings(myTeam());if(w.length&&UI.playAck!==absMd()){UI.sheet={type:'prePlay',w};renderModal();return}startMatchday()},
