@@ -1081,7 +1081,7 @@ function finishMatchday(){applyFmt();
   humans.forEach(id=>{const t=T(id);if(!t.nr&&!t.nOffers.length&&eligibleNR(t)&&Math.random()<.25){t.nOffers=namingOffers(t);
     news(`O estádio do ${t.name} recebeu propostas de naming rights.`,[id]);rep[id].offers.push('Empresas querem dar nome ao seu estádio.')}});
   S.teams.forEach(t=>{if(!isHuman(t.id))topUp(t)});
-  aiMarket();aiReinforce();
+  aiBalance();aiMarket();aiReinforce();
   S.last=L.ms.map(m=>({h:m.h.tid,a:m.a.tid,hg:m.h.goals,ag:m.a.goals,pens:m.pens,comp:m.comp,div:m.div,ev:m.ev.filter(x=>x.type==='goal').map(x=>[x.min,x.side,x.pid])}));
   humans.forEach(id=>{const Rp=rep[id],t=T(id);
     const po=spontOffer(t);if(po)Rp.offers.push(`O ${T(po.tid).name} oferece ${money(po.amount)} por ${P(po.pid).name}.`);
@@ -1524,23 +1524,38 @@ function aiTrim(){let n=0;
 function aiReinforce(){aiTrim();const out=[];let n=0;
   for(const t of shuffle(S.teams.filter(x=>!isHuman(x.id)&&!x.foreign))){if(n>=3)break;
     if(Math.random()>.06*dff().ai)continue;if(inDebt(t)||banned(t)||t.players.length>=24||t.cash<payroll(t)*20)continue;
-    const xi=bestXI(t,[4,4,2]).map(P);const weak=xi.filter(p=>p.pos!=='G').sort((a,b)=>a.str-b.str)[0];if(!weak)continue;
+    const xi=bestXI(t,[4,4,2]).map(P);const pc=posCount(t);const weak=xi.filter(p=>p.pos!=='G'&&pc[p.pos]<PMAX[p.pos]).sort((a,b)=>a.str-b.str)[0];if(!weak)continue;
     const c=Object.values(S.players).filter(p=>p.pos===weak.pos&&p.team!=null&&p.team!==t.id&&!p.loan&&!isHuman(p.team)&&!T(p.team).foreign&&forOK(t,p)&&T(p.team).div>=t.div&&T(p.team).players.length>15&&p.str>=weak.str+4&&p.age<=30).sort((a,b)=>b.str-a.str).slice(0,6);
     if(!c.length)continue;const p=pick(c);const price=r1k(value(p)*rnd(1.1,1.3));if(price>t.cash*.5)continue;
     const from=T(p.team);transfer(p.id,t.id,price);p.sal=wage(p);p.cEnd=S.season+ri(2,4);n++;out.push(`${t.name} se reforça com ${p.name}, que deixa o ${from.name} por ${money(price)}.`)}
   out.forEach(s=>news(s));return out}
+const PMAX={G:3,D:7,M:7,A:6},PMIN={G:2,D:4,M:4,A:3};
+const posCount=t=>{const c={G:0,D:0,M:0,A:0};squad(t).forEach(p=>c[p.pos]++);return c};
+function weakStarter(t,pos){const s=bestXI(t,[4,4,2]).map(P).filter(p=>p&&p.pos===pos);return s.length?Math.min(...s.map(p=>p.str)):BASE[t.div]-5}
+function needPos(t){const c=posCount(t);const low=Object.keys(PMIN).filter(k=>c[k]<PMIN[k]);if(low.length)return pick(low);
+  const xi=bestXI(t,[4,4,2]).map(P).filter(Boolean);const avg=xi.reduce((a,p)=>a+p.str,0)/Math.max(1,xi.length);let best=null,gap=-99;
+  for(const k of ['G','D','M','A']){if(c[k]>=PMAX[k])continue;const s=xi.filter(p=>p.pos===k);if(!s.length)return k;const w=Math.min(...s.map(p=>p.str));const gp=avg-w+Math.random()*3;if(gp>gap){gap=gp;best=k}}return best}
+function aiBalance(){let moves=0;const out=[];
+  for(const t of shuffle(S.teams.filter(x=>!isHuman(x.id)&&!x.foreign))){if(moves>=8)break;const c=posCount(t);const pos=Object.keys(PMAX).find(k=>c[k]>PMAX[k]);if(!pos)continue;
+    const xi=new Set(bestXI(t,[4,4,2]));const p=squad(t).filter(q=>q.pos===pos&&!xi.has(q.id)&&!q.loan&&!q.idol).sort((a,b)=>a.str-b.str||b.age-a.age)[0];if(!p)continue;
+    const price=r1k(value(p)*.9);const buyer=S.teams.filter(b=>b.id!==t.id&&!isHuman(b.id)&&!b.foreign&&!banned(b)&&forOK(b,p)&&posCount(b)[pos]<PMAX[pos]&&b.players.length<24&&b.cash>=price*1.3&&p.str>=weakStarter(b,pos)-6).sort((a,b)=>a.div-b.div||b.cash-a.cash)[0];
+    if(buyer){transfer(p.id,buyer.id,price);p.sal=wage(p);p.cEnd=S.season+ri(1,3);out.push(`${p.name} deixa o ${t.name} e vai para o ${buyer.name} por ${money(price)}.`)}
+    else releaseFree(p);moves++}
+  for(const t of S.teams.filter(x=>!isHuman(x.id)&&!x.foreign&&x.players.length<24)){const c=posCount(t);const k=Object.keys(PMIN).find(q=>c[q]<PMIN[q]);if(!k)continue;
+    const fp=(S.free||[]).map(P).filter(p=>p&&p.team==null&&p.pos===k&&forOK(t,p)).sort((a,b)=>b.str-a.str)[0];
+    if(fp){fp.team=t.id;t.players.push(fp.id);fp.cEnd=S.season+ri(1,2);fp.since=S.season;fp.sal=wage(fp);delete fp.freeSince;S.free=S.free.filter(i=>i!==fp.id)}else{const y=youth(t,k);t.players.push(y.id)}}
+  if(out.length)out.slice(0,3).forEach(s=>news(s));return moves}
 function aiMarket(){
   const ai=S.teams.filter(t=>!isHuman(t.id)&&!t.foreign);const out=[];
   for(let k=ri(0,2);k>0;k--){
     const buyer=wpick(ai,t=>Math.max(1,t.cash/1e6)+(4-t.div)*2);if(buyer.players.length>=22||inDebt(buyer)||banned(buyer))continue;
-    const pos=pick(['D','M','A','A','M','G']);const weak=squad(buyer).filter(p=>p.pos===pos).sort((a,b)=>a.str-b.str)[0];
-    const bar=(weak?weak.str:BASE[buyer.div])+3;
+    const pos=needPos(buyer);if(!pos)continue;const bar=weakStarter(buyer,pos)+3;
     const cands=Object.values(S.players).filter(p=>p.pos===pos&&p.team!=null&&!p.loan&&p.team!==buyer.id&&!isHuman(p.team)&&!T(p.team).world&&forOK(buyer,p)&&T(p.team).div>=buyer.div&&T(p.team).players.length>15&&p.str>=bar&&p.age<=31).sort((a,b)=>b.str-a.str).slice(0,8);
     if(!cands.length)continue;const p=pick(cands);const price=r1k(value(p)*rnd(1,1.3));if(buyer.cash<price*1.3)continue;
     const from=T(p.team);transfer(p.id,buyer.id,price);p.sal=wage(p);p.cEnd=S.season+ri(1,4);out.push(`${p.name} deixa o ${from.name} e vai para o ${buyer.name} por ${money(price)}.`)}
   S.free=(S.free||[]).filter(id=>P(id)&&P(id).team==null);
   for(let k=0;k<2&&S.free.length;k++){if(Math.random()>.5)continue;const top=S.free.map(P).sort((a,b)=>b.str-a.str).slice(0,4);const p=wpick(top,(x,i)=>Math.max(1,x.str-30));if(!p)continue;
-    const tms=ai.filter(t=>!t.foreign&&t.players.length<22&&!banned(t)&&forOK(t,p)&&p.str>=BASE[t.div]-3&&p.str<=BASE[t.div]+14);if(!tms.length)continue;const tm=pick(tms);
+    const tms=ai.filter(t=>!t.foreign&&t.players.length<22&&!banned(t)&&forOK(t,p)&&posCount(t)[p.pos]<PMAX[p.pos]&&p.str>=weakStarter(t,p.pos)-3&&p.str<=BASE[t.div]+14);if(!tms.length)continue;const tm=pick(tms);
     p.team=tm.id;tm.players.push(p.id);p.cEnd=S.season+ri(1,3);p.since=S.season;p.sal=wage(p);delete p.freeSince;S.free=S.free.filter(i=>i!==p.id);out.push(`${p.name}, que estava sem clube, assina com o ${tm.name}.`)}
   out.forEach(s=>news(s));return out}
 function spontOffer(t){
@@ -1772,7 +1787,7 @@ function spontDeals(rep){for(const t of S.teams){if(t.foreign||t.div>=5||t.spS==
   S.teams.forEach(t=>{if(t.sOffers&&t.sOffers.length)t.sOffers=t.sOffers.filter(o=>!o.spont||o.exp>=S.md+1)})}
 function aiFinance(){for(const t of S.teams){if(t.foreign||isHuman(t.id)||t.div>=5)continue;if(!t.loan&&t.cash<payroll(t)*2)aiTakeLoan(t,'para pagar a folha');else if(t.loan&&!t.floan&&t.cash<0)aiTakeLoan(t,'para cobrir o caixa negativo')}}
 function promotedReinforce(ids){const XI={};S.teams.forEach(x=>{if(!x.foreign)XI[x.id]=new Set(bestXI(x,[4,4,2]))});for(const id of ids){const t=T(id);if(!t||isHuman(id)||t.div>=5||banned(t))continue;const others=S.teams.filter(x=>x.div===t.div&&x.id!==id);const target=Math.round(others.reduce((a,x)=>a+teamRating(x),0)/others.length);let n=0,need=4;
-    for(let k=0;k<8&&n<need;k++){if(teamRating(t)>=target-2)break;const xi=bestXI(t,[4,4,2]).map(P);const weak=xi.filter(p=>p.pos!=='G').sort((a,b)=>a.str-b.str)[0];if(!weak||weak.str>=target)break;
+    for(let k=0;k<8&&n<need;k++){if(teamRating(t)>=target-2)break;const xi=bestXI(t,[4,4,2]).map(P);const pc=posCount(t);const weak=xi.filter(p=>p.pos!=='G'&&pc[p.pos]<PMAX[p.pos]).sort((a,b)=>a.str-b.str)[0];if(!weak||weak.str>=target)break;
       const c=Object.values(S.players).filter(p=>p.pos===weak.pos&&p.team!=null&&p.team!==id&&!p.loan&&!isHuman(p.team)&&!T(p.team).world&&(T(p.team).foreign||T(p.team).div>t.div||!(XI[p.team]&&XI[p.team].has(p.id)))&&forOK(t,p)&&T(p.team).players.length>16&&p.str>=target-2&&p.str<=target+6&&p.age<=31).sort((a,b)=>value(a)-value(b)).slice(0,6);
       if(!c.length)break;const p=pick(c);const price=r1k(value(p)*1.1);if(t.cash<price*1.1&&(t.loan||!aiTakeLoan(t,'para se reforçar após o acesso')))break;if(t.cash<price)break;
       const from=T(p.team);transfer(p.id,id,price);p.sal=wage(p);p.cEnd=S.season+ri(1,3);n++;news(`Recém-promovido, o ${t.name} contrata ${p.name} (${from.short}) por ${money(price)}.`)}}}
