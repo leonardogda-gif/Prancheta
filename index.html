@@ -432,7 +432,7 @@ const facMaint=t=>['ct','dm','base'].reduce((s,k)=>s+Math.round(Math.pow(t.fac[k
 const capOf=t=>t.cap-(t.stWork?1500:0);
 const seatCost=t=>r1k(2000*(1500+t.cap/20));
 const TRAINN={N:'Normal',F:'Físico',T:'Tático',A:'Ataque',D:'Defesa'};
-const DIFF={F:{n:'Fácil',inc:1.2,wage:.9,ai:.5,board:.8},N:{n:'Normal',inc:.9,wage:1,ai:1,board:1},D:{n:'Difícil',inc:.75,wage:1.1,ai:1.6,board:1.2}};
+const DIFF={F:{n:'Fácil',inc:1,wage:1,ai:.5,board:.8,cash:1.5,deal:.9},N:{n:'Normal',inc:1,wage:1,ai:1,board:1,cash:1,deal:1},D:{n:'Difícil',inc:1,wage:1,ai:1.6,board:1.2,cash:.7,deal:1.1}};
 const dff=()=>DIFF[(S&&S.diff)||'N'];
 const CK=c=>c==='E'||c==='ES'||c==='EF'?'E':c==='C'?'C':c==='K'||c==='KQ'||c==='KS'||c==='KF'?'K':c==='M0'||c==='M1'?'M':'L';
 const KO=new Set(['C','ES','EF','KQ','KS','KF','M0','M1','DS','DF']);
@@ -604,7 +604,7 @@ function newGame(cfg){
   let id=0;for(let d=0;d<4;d++)NAMES2[d].forEach((n0,i)=>{S.teams.push(makeTeam(id,d,((cfg.names[d]||[])[i]||'').trim()||n0,hues[id]));id++});
   createForeign();NAMES2[4].forEach((n0,i)=>{const t=makeTeam(S.teams.length,5,((cfg.names[4]||[])[i]||'').trim()||n0,(i*47)%360);S.teams.push(t)});applyClubs2();assignNats(false);assignStates();ensureExtras();S.teams.forEach(t=>{t.cash0=t.cash;t.sled={}});Object.values(S.players).forEach(p=>p.sal=wage(p));
   S.managers=cfg.mgrs.map(m=>({name:m.name.trim()||'Técnico',team:+m.team,conf:55,rep:10,offers:[],fired:false,out:false,titles:[],stats:{j:0,v:0,e:0,d:0},career:[{tid:+m.team,name:S.teams[+m.team].name,from:1}],since:50}));
-  S.managers.forEach(m=>{const t=T(m.team);t.lineup=bestXI(t,[4,4,2])});ensureCoaches();
+  S.managers.forEach(m=>{const t=T(m.team);t.lineup=bestXI(t,[4,4,2])});ensureCoaches();if(cfg.mode==='free')S.managers.forEach(m=>{const t=T(m.team);if(!t.startCash){t.cash=r1k(t.cash*(dff().cash||1));t.startCash=1}});
   S.teams.forEach(t=>{if(t.foreign)return;if(isHuman(t.id))t.sOffers=sponsorOffers(t);else aiDeals(t)});S.rep={};seedIdols();seedFree();
   newSeasonStructures();refreshMarket();setGoals();
   S.managers.forEach(m=>news(`${m.name} assume o comando do ${T(m.team).name}. A diretoria espera um bom trabalho.`,[m.team]));
@@ -880,7 +880,9 @@ function namingOffers(t){const V=NRSEASON[t.div]*growth(t)*Math.sqrt(clamp(t.cap
   const n=ri(2,3);return Array.from({length:n},(_,i)=>{const seasons=ri(2,4);const v=V*rnd(.85,1.15);
     return i%2===0?{name:ns[i],seasons,upfront:r1k(v*seasons*.9),perData:0}:{name:ns[i],seasons,upfront:r1k(v*seasons*.4),perData:r1k(v*.65/14)}})}
 function nrDesc(o){const k=dff().inc;return o.perData?`${money(r1k(o.upfront*k))} à vista + ${money(r1k(o.perData*k))} por jogo em casa`:`${money(r1k(o.upfront*k))} à vista`}
-function nrCancelCost(t){const n=t.nr;if(!n)return 0;const S0=n.seasons||n.left;const pre=(n.upfront||0)*n.left/S0;const rem=pre+(n.perData||0)*14*n.left;return r1k(pre+rem*.2)}
+function nrCancelParts(t){const n=t.nr;if(!n)return {pre:0,rem:0,total:0};const S0=n.seasons||n.left||1;const per=NL()+9;const fr=S.cal?Math.min(1,S.cal.slice(S.md).filter(e=>e.t==='L'||e.t==='E').length/per):1;
+  const left=Math.max(0,(n.left||1)-1+fr);const pre=r1k((n.upfront||0)*left/S0);const rem=r1k(pre+(n.perData||0)*(per/2)*left);return {pre,rem,total:r1k(pre+rem*.2),left}}
+function nrCancelCost(t){return nrCancelParts(t).total}
 function aiDeals(t){t.spon=bestSpon(t,sponsorOffers(t));t.sOffers=[];
   if(!t.nr&&eligibleNR(t)&&Math.random()<.5){const o=namingOffers(t)[0];t.nr={name:o.name,perData:o.perData,upfront:o.upfront,seasons:o.seasons,left:o.seasons};t.cash+=o.upfront;t.stadium='Arena '+o.name}}
 function hash(s){let h=7;for(const c of s)h=(h*31+c.charCodeAt(0))|0;return Math.abs(h)}
@@ -1384,7 +1386,7 @@ function renderSetup(){
    <div class="panel stack">
     <div class="spread"><span class="label">Dificuldade</span>
      <div class="seg" role="group">${Object.entries(DIFF).map(([k,v])=>`<button data-act="setupDiff" data-v="${k}" aria-pressed="${(st.diff||'N')===k}">${v.n}</button>`).join('')}</div></div>
-    <p class="muted" style="margin:0;font-size:14px">${{F:'Mais receita, salários menores, adversários que se reforçam pouco e diretoria mais paciente (perdas de confiança −20%).',N:'Dinheiro contado e adversários que se reforçam quando podem.',D:'Receitas menores, salários maiores, adversários agressivos no mercado e diretoria mais exigente (perdas de confiança +20%).'}[st.diff||'N']}</p>
+    <p class="muted" style="margin:0;font-size:14px">${{F:'Caixa inicial 50% maior, jogadores pedem 10% menos de salário e luvas, adversários que se reforçam pouco e diretoria mais paciente (perdas de confiança −20%).',N:'Dinheiro contado e adversários que se reforçam quando podem.',D:'Caixa inicial 30% menor, jogadores pedem 10% mais de salário e luvas, adversários agressivos no mercado e diretoria mais exigente (perdas de confiança +20%). Os valores mostrados são sempre os que entram e saem.'}[st.diff||'N']}</p>
     <div class="spread"><span class="label">Técnicos neste aparelho</span>
      <div class="seg" role="group">${[1,2,3,4].map(n=>`<button data-act="setupN" data-n="${n}" aria-pressed="${st.n===n}">${n}</button>`).join('')}</div></div>
     <p class="muted" style="margin:0;font-size:14px">Com mais de um técnico, cada um escala o próprio time e todos jogam a mesma rodada, passando o celular.</p>
@@ -2011,7 +2013,7 @@ function renderClube(){
       <span class="label">Pênaltis</span>${sg('pens',[['anim','Cobrança a cobrança'],['result','Só o resultado']])}
       ${note('Durante o jogo, toque em Pausar para substituir ou mudar a formação. A postura muda com um toque, sem pausar.')}`)})()}
    ${(UI.cv||'fin')!=='ger'?'':fold('torc','Torcida',`<b style="color:${mc}">${moodLabel(t.mood)} · ${Math.round(t.mood)}</b>`,meter(t.mood,mc,'Humor da torcida'),note(`Torcida <b>${GRN[grOf(t)].toLowerCase()}</b>. Público potencial de ${t.fans.toLocaleString('pt-BR')} por jogo (com ingresso no preço padrão e humor neutro); ele nunca fica abaixo de ${GRFLOOR[grOf(t)].toLocaleString('pt-BR')}, e volta aos poucos ao tamanho natural do clube. ${(()=>{const g0=t.gr0??grOf(t);const top=g0>=5?5:Math.max(g0,4);const pr=t.prest||0;return grOf(t)<top?`<br>Prestígio ${String(pr).replace('.',',')}: com ${pr>=12?24:12} pontos a torcida vira <b>${GRN[Math.min(top,grOf(t)+1)].toLowerCase()}</b>. Cada temporada na Série A vale 3 pontos, na B 1; títulos, Copa e Continental valem muito mais. O prestígio perde 20% a cada temporada.`:grOf(t)>=5?'<br>Torcida gigante: o máximo.':'<br>Este clube já está no maior nível de torcida que pode alcançar.'})()}<br>Vitórias, ingresso barato e reforços animam; derrotas, ingresso caro e vender os melhores irritam. Casa cheia dá até +14% de força.`))}
-   ${(UI.cv||'fin')!=='fin'?'':renderTV(t)+renderDeals(t)}
+   ${(UI.cv||'fin')!=='fin'?'':renderPrizes(t)+renderTV(t)+renderDeals(t)}
    ${(UI.cv||'fin')!=='est'?'':fold('fac','Estrutura',`<span class="muted">nível ${t.fac.ct+t.fac.dm+t.fac.base} de 15</span>`,'',`${t.works?`<div class="panel" style="border-color:var(--info)">${note(`Obra em andamento: ${FACN[t.works.k][0]} para o nível ${t.fac[t.works.k]+1}. Faltam ${t.works.left} data${t.works.left>1?'s':''}.`)}</div>`:''}${Object.entries(FACN).map(([k,[n,d]])=>{const l=t.fac[k];const c=facCost(t,l);return `<div class="offer stack" style="gap:4px"><div class="spread"><b>${n}</b><span class="lvl" aria-label="Nível ${l} de 5">${[0,1,2,3,4].map(i=>`<i class="${i<l?'on':''}"></i>`).join('')}</span></div>${note(d)}${k==='base'?`<span style="font-size:13px">${l?`Próxima revelação: <b>fim da temporada ${S.season}</b> · 1 ou 2 jovens com força em torno de <b>${BASE[t.div]-6+2*l}</b>${l<5?` (no nível ${l+1}: ${BASE[t.div]-4+2*l})`:''}.${t.players.length>=26?' <span class="warn">Elenco cheio (26): não haverá vaga.</span>':''}`:'<span class="warn">Nível 0: a base não revela jogadores.</span>'}</span>`:''}${l<5?`<button class="btn sm" data-act="facUp" data-k="${k}" style="align-self:flex-start" ${t.cash>=c&&!t.works?'':'disabled'}>Melhorar para nível ${l+1} · ${money(c)} · ${4+2*l} datas</button>${note(`Paga agora ${money(c)}; depois da obra, a manutenção do clube passa de ${money(facMaint(t))} para ${money(facMaint({...t,fac:{...t.fac,[k]:l+1}}))} por rodada do Nacional.`)}`:note('Nível máximo.')}</div>`}).join('')}${note(`Uma obra por vez. O custo sobe nas séries mais altas. Manutenção: ${money(facMaint(t))} por rodada do Nacional, e cresce a cada nível.`)}`)}
    ${(UI.cv||'fin')!=='ger'?'':fold('troph','Sala de troféus',`<span class="muted">${t.troph.length}</span>`,'',t.troph.length?`<div class="troph">${t.troph.slice().reverse().map(x=>`<div>${trophIcon()}<b>${esc(x.n)}</b><small>Temporada ${x.s}</small></div>`).join('')}</div>`:note('Nenhum título ainda. Estaduais, Nacional, Copa, Continental e Mundial aparecem aqui.'))}
    ${(UI.cv||'fin')!=='ger'?'':(()=>{const rc=t.rec||{g:{},a:{},n:{}};const top=(o)=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,3);const s=mg.stats||{j:0,v:0,e:0,d:0};const ap=s.j?Math.round((s.v*3+s.e)/(s.j*3)*100):0;
@@ -2191,7 +2193,7 @@ function listOffers(t){const out=[];t.pOffers=t.pOffers||[];
 const absMd=()=>S.season*50+S.md;
 const defYears=p=>p.age<=27?3:p.age<=31?2:1;
 function renDemand(p){if(!p.ren||p.ren.season!==S.season){const r=p.rn?p.rs/p.rn:6.2;const k=1.1+(r>=7?.15:r>=6.5?.07:0)+(p.idol?.2:0)+(p.age<=24?.1:0);
-  p.ren={season:S.season,sal:Math.max(p.sal,Math.round(wage(p)*k/100)*100),luvas:r1k(value(p)*.08*(p.idol?1.5:1)),tried:false}}return p.ren}
+  const dl=dff().deal||1;p.ren={season:S.season,sal:Math.max(p.sal,Math.round(wage(p)*k*dl/100)*100),luvas:r1k(value(p)*.08*(p.idol?1.5:1)*dl),tried:false}}return p.ren}
 function renewBox(p){const d=renDemand(p);const y=(UI.renY&&UI.renY[p.id])||defYears(p);const lv=r1k(d.luvas*y/2);
   return `<div class="panel stack" style="margin-top:12px;border-color:var(--warn)"><span class="label">Renovação de contrato</span>
     ${note(`O contrato termina no fim desta temporada. Salário atual: ${money(p.sal)} por data. Sem renovar, ele sai de graça.`)}
@@ -2212,11 +2214,11 @@ function seedFree(){S.free=S.free||[];for(let i=0;i<14;i++){const p=makePlayer(p
 function releaseFree(p){const t=T(p.team);t.players=t.players.filter(i=>i!==p.id);t.lineup=t.lineup.filter(i=>i!==p.id);
   p.team=null;p.idol=false;delete p.sale;delete p.ren;p.leaving=false;p.freeSince=S.season;(S.free=S.free||[]).push(p.id)}
 const levelDiv=p=>{for(let d=0;d<4;d++)if(p.str>=BASE[d]-4)return d;return 3};
-const sigWage=(p,t)=>Math.round(wageFor(p,t?{div:Math.min(t.div,levelDiv(p))}:null)*1.2/100)*100;
+const sigWage=(p,t)=>Math.round(wageFor(p,t?{div:Math.min(t.div,levelDiv(p))}:null)*1.2*(dff().deal||1)/100)*100;
 function freeAsk(p,t){if(!t)return {ok:true,fee:r1k(value(p)*.15),sal:sigWage(p,t)};const mg=mgrOf(t.id);const rep=mg?(mg.rep??10):10;
   const dv=S.teams.filter(x=>x.div===t.div);const avg=dv.length?dv.reduce((s,x)=>s+teamRating(x),0)/dv.length:BASE[t.div];const gap=p.str-avg-rep/10-(grOf(t)-3)*2;const sal=sigWage(p,t);
   if(gap>10)return {ok:false,fee:0,sal,why:`Não quer jogar na ${DIVN[t.div]}: espera um clube do nível dele. Reputação maior ajuda a convencer.`};
-  const mult=gap>4?1+(gap-4)*.15:1;return {ok:true,fee:r1k(value(p)*.15*mult),sal,mult}}
+  const mult=gap>4?1+(gap-4)*.15:1;return {ok:true,fee:r1k(value(p)*.15*mult*(dff().deal||1)),sal,mult}}
 const freeFee=p=>freeAsk(p,myTeam()).fee;
 const RESALE=10;const recent=p=>p&&p.bought!=null&&absMd()-p.bought<RESALE?RESALE-(absMd()-p.bought):0;
 const saleLock=p=>{if(!p)return '';if(p.lockS!=null&&S.season<p.lockS)return `Contratado sem custo de transferência: só pode ser negociado a partir da temporada ${p.lockS}.`;const r=recent(p);return r?`Chegou ou renovou há pouco: só pode ser negociado daqui a ${r} data${r>1?'s':''}.`:''};
@@ -2251,6 +2253,16 @@ function contractTag(p){return p.loan?'':p.leaving?'<span class="tag inj">SAI NO
 function sponDesc(o){return `${money(o.perData)} por rodada do Nacional${o.perWin?` + ${money(o.perWin)} por vitória`:''}${o.bonus?` + ${money(o.bonus)} se for campeão ou subir`:''}`}
 function leftLeague(){return S.cal.slice(S.md).filter(e=>e.t==='L').length}
 const sponCancelCost=t=>t.spon?r1k(sponGuar(t.spon,t)*.2):0;
+function renderPrizes(t){if(t.div>=5)return '';const L=t.sled||{};const got=[['Nacional (colocação e acesso)',L.prize],['Estadual',L.est],['Copa Nacional',L.cup],['Copa Continental',L.cont],['Mundial',L.mund],['Artilheiros',L.art]].filter(x=>x[1]);
+  const tot=got.reduce((a,x)=>a+x[1],0);const nx=[];const tb=tabOf(t);const pos=Math.max(0,tb.findIndex(x=>x.id===t.id));const n=tb.length;const pz=i=>Math.round(PRIZE[t.div]*(1-.63*i/Math.max(1,n-1)));
+  if(!S.over){nx.push(`<b>Nacional:</b> se terminar em ${pos+1}º, ${money(pz(pos))}${pos?` · em 1º, ${money(pz(0))}`:''}${t.div>0?` · acesso: mais ${money([2.5e7,6e6,1e6][t.div-1]||0)}`:''}`);
+    const ci=S.cup&&S.cup.alive&&S.cup.alive.includes(t.id)&&S.cup.champ==null;if(ci){const st=S.cup.stage||0;nx.push(`<b>Copa:</b> ${CUPN.slice(st).map((nm,k)=>`passar da ${nm.toLowerCase()} ${money(CUPPRIZE[st+k])}`).join(' · ')}`)}
+    const inK=S.kParts&&S.kParts.includes(t.id)&&S.kchamp==null&&!(S.ko.KQ.length&&!S.ko.KQ.some(x=>x.w===t.id)&&(S.ko.KQ.some(x=>x.h===t.id||x.a===t.id)||S.ko.KQ.length>=4));
+    if(inK)nx.push(`<b>Continental:</b> ${money(1.5e6)} por vitória nos grupos · quartas ${money(6e6)} · semifinal ${money(1e7)} · título ${money(3e7)} (vice ${money(1.5e7)}) · o campeão vai ao Mundial: ${money(2e7)} por participar, ${money(1e7)} na semifinal e ${money(7e7)} pelo título`);
+    const sti=S.states?S.states.findIndex(s=>s.includes(t.id)):-1;if(sti>=0&&S.est&&S.est.champ[sti]==null&&!(S.ko.ES.length&&!S.ko.ES.some(x=>x.w===t.id)))nx.push(`<b>Estadual:</b> vencer a semifinal ${money(5e5)} · título ${money(5e6)} (vice ${money(2e6)})`);
+    nx.push(`<b>Artilheiro:</b> ${DIVN[t.div]} ${money(ARTP.L[t.div]||0)} · estadual ${money(ARTP.E)} · Copa ${money(ARTP.C)} · Continental ${money(ARTP.K)}`)}
+  return fold('prizes','Prêmios',`<b class="num" style="color:var(--ok)">${tot?'+'+money(tot):'—'}</b>`,'',`<span class="label">Recebidos nesta temporada</span>${got.length?got.map(([l,v])=>`<div class="spread" style="font-size:14px"><span>${l}</span><b class="num" style="color:var(--ok)">+${money(v)}</b></div>`).join(''):note('Nenhum prêmio ainda nesta temporada.')}
+    ${nx.length?`<span class="label" style="margin-top:6px">Ainda em jogo</span><ul class="news" style="margin:0">${nx.map(x=>`<li style="font-size:14px">${x}</li>`).join('')}</ul>`:''}${note('Valores exatos: é o que entra no caixa. A cota de TV por desempenho aparece no quadro Cota de TV.')}`)}
 function renderTV(t){if(t.div>=5)return '';const b=blocOf(t);const pos=Math.max(0,tabOf(t).findIndex(x=>x.id===t.id));const inc=dff().inc;const L=t.sled||{};
   const n=tabOf(t).length;const perf=i=>r1k(TV[t.div]*b.perf*NL()*tvW(i,n)*tvCut(t)*inc);const other=t.bloc==='B'?'A':'B';const nx=t.blocNext&&t.blocNext!==t.bloc?t.blocNext:null;
   const pc=v=>Math.round(v*100)+'%';const ar=audRel(t);
@@ -2269,11 +2281,11 @@ function renderDeals(t,dec){
   const cg=t.spon?sponGuar(t.spon,t):0;
   const sp=`${t.spon?`<div class="stack" style="gap:6px"><span class="muted" style="font-size:14px">Atual: <b style="color:var(--fg)">${esc(t.spon.name)}</b>${t.spon.v2?` · ${SPT[t.spon.type][0]}`:''} · até o fim da temporada</span>${sponGrid(t.spon)}<span class="muted" style="font-size:13px">Garantido até o fim da temporada: <b>${money(cg)}</b>${t.spon.v2?' + bônus':''}</span></div>`:note('Sem patrocinador nesta temporada.')}
     ${t.sOffers.length?`${note(t.spon?`Para trocar, a multa é de ${money(sc)} (20% do que falta receber na temporada).`:'Escolha um para esta temporada. As ofertas melhoram com divisão, torcida e campanha.')}${t.sOffers.map((o,i)=>{const g=sponGuar(o,t);return `<div class="offer stack" style="gap:6px"><div class="spread"><b>${esc(o.name)}</b><span class="row" style="gap:4px">${o.spont?`<span class="tag yel">BOA FASE · ATÉ DATA ${o.exp+1}</span>`:''}${o.v2?`<span class="tag" style="background:var(--info);color:#fff">${SPT[o.type][0].toUpperCase()}</span>`:''}</span></div>${o.v2?`<span class="muted" style="font-size:13px">${SPT[o.type][1]}</span>`:''}${sponGrid(o)}
-      <div class="spread"><span class="muted" style="font-size:13px">Garantido: <b style="color:var(--fg)">${money(g)}</b>${t.spon?` · atual ${money(cg)}`:''}${o.v2?' + bônus':''}</span><button class="btn sm primary" data-act="sponYes" data-i="${i}" ${t.spon&&t.cash<sc?'disabled':''}>${t.spon?'Trocar':'Fechar contrato'}</button></div></div>`}).join('')}${note('Garantido = jogos que restam na temporada (Nacional, grupos do estadual, próxima fase da Copa e grupos da Continental, se você estiver nela). Bônus dependem da campanha.')}${t.spon?'<button class="btn sm" data-act="sponKeep" style="align-self:flex-start">Manter o atual</button>':'<button class="btn sm" data-act="sponKeep" style="align-self:flex-start">Recusar as propostas</button>'}`:sBtn}`;
+      <div class="spread"><span class="muted" style="font-size:13px">Garantido: <b style="color:var(--fg)">${money(g)}</b>${t.spon?` · atual ${money(cg)}`:''}${o.v2?' + bônus':''}${t.spon?`<br>Saldo da troca: <b style="color:${g-cg-sc>=0?'var(--ok)':'var(--danger)'}">${g-cg-sc>=0?'+':'−'}${money(Math.abs(g-cg-sc))}</b> até o fim da temporada (já descontada a multa de ${money(sc)})`:''}</span><button class="btn sm primary" data-act="sponYes" data-i="${i}" ${t.spon&&t.cash<sc?'disabled':''}>${t.spon?'Trocar':'Fechar contrato'}</button></div></div>`}).join('')}${note('Garantido = jogos que restam na temporada (Nacional, grupos do estadual, próxima fase da Copa e grupos da Continental, se você estiver nela). Bônus dependem da campanha.')}${t.spon?'<button class="btn sm" data-act="sponKeep" style="align-self:flex-start">Manter o atual</button>':'<button class="btn sm" data-act="sponKeep" style="align-self:flex-start">Recusar as propostas</button>'}`:sBtn}`;
   const cc=nrCancelCost(t);
   const nBtn=eligibleNR(t)?`<button class="btn sm" data-act="nrSearch" ${nCan?'':'disabled'} style="align-self:flex-start">${nCan?'Buscar propostas':'Nova busca em algumas datas'}</button>`:'';
   const nr=`${t.nr?`${note(`Atual: ${esc(t.nr.name)}${t.nr.upfront?` pagou ${money(t.nr.upfront)} à vista`:''}${t.nr.perData?` ${t.nr.upfront?'e paga':'paga'} ${money(t.nr.perData)} por jogo em casa`:''} · faltam ${t.nr.left} temporada${t.nr.left>1?'s':''}`)}
-      <div class="spread">${note(`Rescindir sem trocar custa ${money(cc)}.`)}<button class="btn sm danger" data-act="nrCancel" ${t.cash>=cc?'':'disabled'}>Rescindir</button></div>`
+      <div class="spread">${note((()=>{const c=nrCancelParts(t);return `Rescindir sem trocar custa ${money(cc)}: devolução de ${money(c.pre)} do valor à vista (proporcional ao contrato que falta) + 20% de ${money(c.rem)} que ainda faltava receber.`})())}<button class="btn sm danger" data-act="nrCancel" ${t.cash>=cc?'':'disabled'}>Rescindir</button></div>`
       :note(eligibleNR(t)?'Sem contrato de naming rights.':'Propostas a partir da Série C ou com 12.000 lugares.')}
     ${t.nOffers.length?`${note(t.nr?`Trocar exige rescindir o atual por ${money(cc)}. O saldo de cada proposta já desconta isso.`:'À vista dá dinheiro para reforçar agora. O misto paga menos na hora e mais ao longo do contrato.')}${t.nOffers.map((o,i)=>{const net=r1k(o.upfront*dff().inc)-(t.nr?cc:0);return `<div class="spread offer"><div style="min-width:0"><b>Arena ${esc(o.name)}</b><div class="muted" style="font-size:14px">${nrDesc(o)} · ${o.seasons} temporadas${t.nr?` · saldo na hora <b style="color:${net>=0?'var(--ok)':'var(--danger)'}">${net>=0?'+':'−'}${money(Math.abs(net))}</b>`:''}</div></div><button class="btn sm primary" data-act="nrYes" data-i="${i}" ${t.nr&&t.cash+o.upfront<cc?'disabled':''}>${t.nr?'Trocar':'Aceitar'}</button></div>`}).join('')}<button class="btn sm" data-act="nrNo" style="align-self:flex-start">${t.nr?'Manter o atual':'Recusar as propostas'}</button>`:nBtn}`;
   if(dec)return (t.sOffers.length?fold('spon','Patrocínio',t.spon?`<b>${esc(t.spon.name)}</b>`:'<b style="color:var(--info)">Escolher</b>','',sp,true):'')+(t.nOffers.length?fold('nr','Naming rights','<b style="color:var(--info)">Propostas</b>','',nr,true):'');
@@ -2550,12 +2562,12 @@ const ACT={
   setupGo(){const st=UI.setup;if(saveState()==='ok'&&!st.okOver){st.askOver=true;render();window.scrollTo(0,document.body.scrollHeight);return}backup();let ms=st.mgrs.slice(0,st.n);let sets=null;
     if(st.mode==='offers'){const ids=shuffle(Array.from({length:16},(_,i)=>30+i));const k=Math.min(3,Math.floor(16/ms.length));sets=ms.map((m,i)=>ids.slice(i*k,i*k+k));ms=ms.map((m,i)=>({...m,team:sets[i][0]}))}
     else if(new Set(ms.map(m=>+m.team)).size<ms.length){toast('Cada técnico precisa de um clube diferente.');return}
-    newGame({names:st.names,mgrs:ms,diff:st.diff||'N'});
+    newGame({names:st.names,mgrs:ms,diff:st.diff||'N',mode:st.mode});
     if(sets){S.news=[];S.managers.forEach((m,i)=>m.start=sets[i]);UI.cur=0;save()}
     UI.setup=null;render();window.scrollTo(0,0)},
   startPick(d){const m=me();if(!m||!m.start)return;const id=+d.tid;if(!m.start.includes(id))return;const old=m.team;
     if(id!==old){const o=T(old);aiDeals(o);o.lineup=bestXI(o,[4,4,2]);m.team=id;const t=T(id);t.spon=null;t.sOffers=sponsorOffers(t)}
-    const t=T(id);t.sled={};t.cash0=t.cash;t.sledFrom=0;t.lineup=bestXI(t,[4,4,2]);m.career=[{tid:id,name:t.name,from:S.season}];m.goal=makeGoal(t);delete m.start;
+    const t=T(id);if(!t.startCash&&S.season===1){t.cash=r1k(t.cash*(dff().cash||1));t.startCash=1}t.sled={};t.cash0=t.cash;t.sledFrom=0;t.lineup=bestXI(t,[4,4,2]);m.career=[{tid:id,name:t.name,from:S.season}];m.goal=makeGoal(t);delete m.start;
     ensureCoaches();news(`${m.name} assume o comando do ${t.name}. A diretoria espera um bom trabalho.`,[id]);
     const n=S.managers.findIndex(x=>x.start&&!x.out);UI.cur=n>=0?n:0;UI.tab='jogo';save();render();window.scrollTo(0,0);toast(`Bem-vindo ao ${t.name}!`)},
   continue(){const s=loadSaved();if(!s){UI.loadErr='O jogo salvo está danificado e não pode ser aberto.';render();return}try{S=prepState(s);UI.cur=Math.max(0,S.managers.findIndex(m=>!m.out));UI.tab='jogo';UI.loadErr=null;render();resumeLive()}catch(e){S=null;UI.loadErr=`O jogo salvo não pôde ser aberto: ${e.message}.`;render()}},
