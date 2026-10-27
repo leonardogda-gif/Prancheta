@@ -116,6 +116,8 @@ details.panel:not(.fold)>summary{min-height:40px;display:flex;align-items:center
 /* elenco */
 .plist{display:flex;flex-direction:column}
 .prow{display:grid;grid-template-columns:40px minmax(0,1fr) 54px 58px 44px;gap:8px;align-items:center;padding:8px 4px;border-bottom:1px solid var(--line)}
+.psal{display:block;font:700 14px var(--display);color:var(--fg);margin-top:2px;font-variant-numeric:tabular-nums}
+.prow .tags{display:flex;flex-direction:column;align-items:center;gap:3px}.pnota{font-size:11px;color:var(--muted);white-space:nowrap}
 .prow.head{font:600 11px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-block:4px}
 .prow.xi{background:color-mix(in srgb,var(--ok) 9%,transparent)}
 .prow.out{opacity:.62}
@@ -1494,9 +1496,9 @@ function swapPanel(t,sl){const id=UI.swap;if(!id||!t.lineup.includes(id)||!P(id)
 function pRow(p,t,sl){const inXI=t.lineup.includes(p.id);const out=!avail(p);
       return `<div class="prow ${inXI?(out?'bad':'xi'):''} ${out&&!inXI?'out':''}">
        <span class="pos ${p.pos}">${POSN[p.pos]}</span>
-       <button class="pname" data-act="player" data-pid="${p.id}"><b>${p.idol?'<span class="idol" title="Ídolo da torcida">★</span> ':''}${esc(p.name)}</b><small>${isFor(p)?p.nat+' · ':''}${p.age} anos · pot. ${potTxt(p)}${p.rn?' · nota '+avgR(p):''} · ${money(p.sal)}/data</small></button>
+       <button class="pname" data-act="player" data-pid="${p.id}"><b>${p.idol?'<span class="idol" title="Ídolo da torcida">★</span> ':''}${esc(p.name)}</b><small>${isFor(p)?p.nat+' · ':''}${p.age} anos${p.loan?'':` · até T${p.cEnd}`}</small><span class="psal">${money(p.sal)}/data</span></button>
        <span class="str">${p.str}${trendIcon(p)}</span>
-       <span class="tags">${statusTagsXI(p,t,sl,inXI)}</span>
+       <span class="tags">${statusTagsXI(p,t,sl,inXI)}${p.rn?`<small class="pnota">nota ${avgR(p)}</small>`:''}</span>
        <button class="xi-btn" data-act="xi" data-pid="${p.id}" aria-pressed="${inXI}" aria-label="${inXI?'Titular':'Reserva'}: ${esc(p.name)}. Toque para trocar">${inXI?'Tit.':'Res.'}</button>
       </div>`}
 function statusTagsXI(p,t,sl,inXI){return `${p.base===t.id?'<span class="tag" title="Revelado pela base">BASE</span>':''}${t.captain===p.id?'<span class="tag" style="background:var(--fg);color:var(--bg)">C</span>':''}${t.pk===p.id?'<span class="tag" style="background:var(--fg);color:var(--bg)">PÊN</span>':''}${p.nt>0?`<span class="tag" style="background:var(--ok);color:#fff">SELEÇÃO${isFor(p)?' '+p.nat:''}</span>`:''}${p.loan?'<span class="tag sale">EMPRESTADO</span>':''}${(p.fit??100)<85?`<span class="tag" style="background:${p.fit<60?'var(--danger)':p.fit<75?'var(--warn)':'var(--surface2)'};color:${p.fit<75?'#fff':'var(--muted)'}">COND ${p.fit}%</span>`:''}${isHuman(p.team)?contractTag(p):''}${p.sale?'<span class="tag sale">À VENDA</span>':''}${inXI&&sl[p.id]&&sl[p.id]!==p.pos?`<span class="tag yel">de ${POSN[sl[p.id]]}</span>`:''}${p.inj?`<span class="tag inj">LES ${p.inj}</span>`:''}${suspN(p)?`<span class="tag sus">SUSP</span>`:''}${ycN(p)?`<span class="tag" title="${ycN(p)} cartão amarelo${ycN(p)>1?'s':''}" aria-label="${ycN(p)} cartão amarelo${ycN(p)>1?'s':''}"><i class="ycard"></i>${ycN(p)}</span>`:''}${!p.inj&&!suspN(p)&&!ycN(p)&&!(p.nt>0)?'<span class="tag">ok</span>':''}`}
@@ -1873,9 +1875,11 @@ function renderElenco(){
    </div>`}
    ${UI.ev==='all'?`${contractsPanel(t)}
    ${(()=>{const lent=Object.values(S.players).filter(p=>p.loan&&p.loan.owner===t.id);return lent.length?fold('lent','Emprestados por você',`<span class="muted">${lent.length}</span>`,'',lent.map(p=>`<div class="spread offer"><span><b>${esc(p.name)}</b> <span class="muted" style="font-size:13px">no ${esc(T(p.team).name)} · ${p.rn} jogo${p.rn===1?'':'s'}${p.rn?' · nota '+avgR(p):''} · força ${p.str}</span></span></div>`).join('')+note('Voltam ao fim da temporada. Jogando, os jovens evoluem mais rápido.')):''})()}
+   <div class="panel stack"><div class="spread"><span class="label">Folha salarial</span><b class="num" style="font:800 20px var(--display)">${money(payroll(t))}<small class="muted" style="font:500 12px var(--body)"> por data</small></b></div>
+     <div class="seg" role="group" aria-label="Ordenar elenco">${[['pos','Posição'],['sal','Salário'],['str','Força'],['age','Idade']].map(([k,l])=>`<button data-act="psort" data-v="${k}" aria-pressed="${(UI.psort||'pos')===k}">${l}</button>`).join('')}</div></div>
    <div class="plist">
-    <div class="prow head"><span>Pos</span><span>Jogador</span><span style="text-align:center">Força</span><span style="text-align:center">Status</span><span></span></div>
-    ${ps.map(p=>pRow(p,t,sl)).join('')}
+    <div class="prow head"><span>Pos</span><span>Jogador · salário</span><span style="text-align:center">Força</span><span style="text-align:center">Status</span><span></span></div>
+    ${ps.slice().sort((a,b)=>({sal:b.sal-a.sal,str:b.str-a.str,age:a.age-b.age}[UI.psort||'pos']??0)).map(p=>pRow(p,t,sl)).join('')}
    </div>`:`<div class="stack" style="gap:6px"><span class="label">Reservas disponíveis</span><div class="plist">${ps.filter(p=>!t.lineup.includes(p.id)&&avail(p)).map(p=>pRow(p,t,sl)).join('')||note('Sem reservas disponíveis.')}</div>
      ${ps.some(p=>!t.lineup.includes(p.id)&&!avail(p))?`<span class="label" style="margin-top:8px">Indisponíveis</span><div class="plist">${ps.filter(p=>!t.lineup.includes(p.id)&&!avail(p)).map(p=>pRow(p,t,sl)).join('')}</div>`:''}</div>`}
    </div></section>`}
@@ -2264,7 +2268,7 @@ function bidBox2(p){const mt=myTeam();const t=T(p.team);
     ${yearsSeg(p)}
     ${b.counter?`<div class="spread"><span>O ${esc(t.name)} aceita por <b>${money(b.counter)}</b>.</span><button class="btn sm primary" data-act="bidCounterYes" data-pid="${p.id}" ${mt.cash>=b.counter&&mt.players.length<26?'':'disabled'}>Fechar</button></div>`:''}
     <button class="btn primary" data-act="bidSend" data-pid="${p.id}" style="align-self:flex-start" ${tried||mt.cash<b.amt||mt.players.length>=26?'disabled':''}>${tried?'Proposta já enviada nesta data':'Enviar proposta'}</button></div>`}
-function contractTag(p){return p.loan?'':p.leaving?'<span class="tag inj">SAI NO FIM</span>':p.cEnd<=S.season?'<span class="tag yel">FIM DE CONTRATO</span>':''}
+function contractTag(p){return p.loan?'':p.leaving?'<span class="tag inj">SAI NO FIM</span>':p.cEnd<=S.season?'<span class="tag yel">ÚLTIMO ANO</span>':''}
 function sponDesc(o){return `${money(o.perData)} por rodada do Nacional${o.perWin?` + ${money(o.perWin)} por vitória`:''}${o.bonus?` + ${money(o.bonus)} se for campeão ou subir`:''}`}
 function leftLeague(){return S.cal.slice(S.md).filter(e=>e.t==='L').length}
 const sponCancelCost=t=>t.spon?r1k(sponGuar(t.spon,t)*.2):0;
@@ -2520,7 +2524,7 @@ function renderModal(){
     const free=p.team==null;const t=free?{id:-1,name:'Sem clube',div:null,players:[],lineup:[]}:T(p.team);const mine=!free&&isHuman(t.id)&&t.id===myTeam()?.id;
     html=`<div class="spread"><div class="row"><span class="pos ${p.pos}" style="width:44px">${POSN[p.pos]}</span><h3 style="font-size:26px">${esc(p.name)}</h3>${isPromise(p)?'<span class="tag" style="background:var(--info);color:#fff">PROMESSA</span>':''}${p.idol?'<span class="tag" style="background:var(--star);color:#1a1400">★ ÍDOLO</span>':''}</div><div class="row" style="gap:6px">${sh.back!=null?'<button class="btn sm" data-act="teamBack">Voltar</button>':''}<button class="btn sm" data-act="close">Fechar</button></div></div>
      <p class="muted" style="margin:6px 0 0">${natName(p)} · ${free?'Sem clube · livre no mercado':`<span style="display:inline-flex;vertical-align:middle">${crest(p.team,'sm')}</span> ${esc(t.name)} · ${DIVN[t.div]} · contrato até a T${p.cEnd}`}</p>
-     ${(()=>{const st=[];if(p.inj)st.push(`<span class="tag inj">LESÃO · ${p.inj} data${p.inj>1?'s':''}</span>`);if(suspAll(p).length)st.push(`<span class="tag sus">SUSPENSO · ${esc(suspTxt(p).toUpperCase())}</span>`);if(p.nt>0)st.push('<span class="tag" style="background:var(--ok);color:#fff">SELEÇÃO</span>');if(ycN(p))st.push(`<span class="tag"><i class="ycard"></i>${ycN(p)} amarelo${ycN(p)>1?'s':''}${ycN(p)===2?' · o próximo suspende':''}</span>`);if(p.loan)st.push('<span class="tag sale">EMPRESTADO</span>');if(p.sale)st.push('<span class="tag sale">À VENDA</span>');if(!free&&p.cEnd<=S.season)st.push('<span class="tag yel">FIM DE CONTRATO</span>');if(p.base!=null&&p.base===p.team)st.push('<span class="tag">REVELADO PELA BASE</span>');if(p.trend)st.push(`<span class="tag" style="background:${p.trend>0?'var(--ok)':'var(--danger)'};color:#fff">${p.trend>0?'▲ +':'▼ '}${p.trend} na temporada</span>`);return st.length?`<div class="row" style="gap:6px;margin-top:8px">${st.join('')}</div>`:''})()}
+     ${(()=>{const st=[];if(p.inj)st.push(`<span class="tag inj">LESÃO · ${p.inj} data${p.inj>1?'s':''}</span>`);if(suspAll(p).length)st.push(`<span class="tag sus">SUSPENSO · ${esc(suspTxt(p).toUpperCase())}</span>`);if(p.nt>0)st.push('<span class="tag" style="background:var(--ok);color:#fff">SELEÇÃO</span>');if(ycN(p))st.push(`<span class="tag"><i class="ycard"></i>${ycN(p)} amarelo${ycN(p)>1?'s':''}${ycN(p)===2?' · o próximo suspende':''}</span>`);if(p.loan)st.push('<span class="tag sale">EMPRESTADO</span>');if(p.sale)st.push('<span class="tag sale">À VENDA</span>');if(!free&&p.cEnd<=S.season)st.push('<span class="tag yel">ÚLTIMO ANO</span>');if(p.base!=null&&p.base===p.team)st.push('<span class="tag">REVELADO PELA BASE</span>');if(p.trend)st.push(`<span class="tag" style="background:${p.trend>0?'var(--ok)':'var(--danger)'};color:#fff">${p.trend>0?'▲ +':'▼ '}${p.trend} na temporada</span>`);return st.length?`<div class="row" style="gap:6px;margin-top:8px">${st.join('')}</div>`:''})()}
      <span class="label" style="display:block;margin-top:12px">Rendimento</span>
      <div class="kv"><div><span class="label">Força</span><b>${p.str}${trendIcon(p)}</b></div><div><span class="label">Potencial</span><b>${potTxt(p)}</b></div><div><span class="label">Condição</span><b style="color:${(p.fit??100)<60?'var(--danger)':(p.fit??100)<75?'var(--warn)':'var(--fg)'}">${p.fit??100}%</b></div>
       <div><span class="label">Jogos</span><b>${p.rn}</b></div><div><span class="label">Nota média</span><b>${p.rn?avgR(p):'—'}</b></div><div><span class="label">Gols</span><b>${p.g}</b></div></div>${p.pos!=='G'?note('Pênaltis: '+pkLabel(p)+'.'):''}
@@ -2707,6 +2711,7 @@ const ACT={
   tipOk(d){UI.prefs.tips=UI.prefs.tips||{};UI.prefs.tips[d.v]=1;savePrefs();render()},
   tipsOff(){UI.prefs.tipsOff=true;savePrefs();render();toast('Dicas desligadas. Dá para religar em Clube → Ajustes.')},
   tipsOn(){UI.prefs.tipsOff=false;UI.prefs.tips={};savePrefs();render();toast('As dicas vão aparecer de novo.')},
+  psort(d){UI.psort=d.v;render()},
   tmodeGo(d){UI.tab='tabela';UI.tmode=d.v;if(myTeam())UI.tdiv=myTeam().div;render();window.scrollTo(0,0)},
   tmode(d){UI.tmode=d.m;if(d.m==='liga'&&myTeam())UI.tdiv=myTeam().div;render()},
   price(d){const t=myTeam();t.price=clamp(t.price+ +d.d,1,300);save();render()},
