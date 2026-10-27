@@ -454,7 +454,9 @@ const FORMS=[[4,4,2],[4,3,3],[3,5,2],[4,5,1],[5,3,2],[4,4,2],[4,3,3]];
 const FORM_LIST=['4-4-2','4-3-3','3-5-2','4-5-1','5-3-2','3-4-3','5-4-1'];
 const fArr=s=>(s||'4-4-2').split('-').map(Number);
 const PEN={G:{G:1,D:.4,M:.4,A:.4},D:{G:.4,D:1,M:.8,A:.55},M:{G:.4,D:.8,M:1,A:.8},A:{G:.4,D:.55,M:.8,A:1}};
-const SAVE_KEY='prancheta-fc-save-v1';
+const SLOTK=['prancheta-fc-save-v1','prancheta-fc-save-v1-s2'];
+let SLOT=(()=>{try{return localStorage.getItem('prancheta-fc-slot')==='1'?1:0}catch(e){return 0}})();let SAVE_KEY=SLOTK[SLOT];
+function setSlot(i){i=i===1?1:0;SLOT=i;SAVE_KEY=SLOTK[i];OTHER_TAB=false;SAVE_ERR=null;try{localStorage.setItem('prancheta-fc-slot',String(i))}catch(e){}}
 
 /* ============ utilidades ============ */
 const $=s=>document.querySelector(s);
@@ -1169,12 +1171,14 @@ function pickClubs(mg,mode,n,fallen=[]){
     return [...shuffle(fl),...shuffle(hi).sort((a,b)=>grOf(b)-grOf(a))].slice(0,n).map(t=>t.id)}
   else{let p2=pool.filter(t=>t.div>=Math.min(3,curDiv)&&repNeed(t)<=rep+5);if(!p2.length)p2=pool.filter(t=>t.div===3);pool=p2}
   return shuffle(pool).slice(0,n).map(t=>t.id)}
+function resignJobs(mg){const rep=mg.rep??10;const pool=S.teams.filter(t=>!isHuman(t.id)&&!t.foreign&&t.div<5&&t.id!==mg.firedFrom&&repNeed(t)<=rep);
+  const sc=t=>(4-t.div)*10+grOf(t)*3+teamRating(t)/10+Math.random()*6;return pool.sort((a,b)=>sc(b)-sc(a)).slice(0,3).map(t=>t.id)}
 function fire(mg,why){
-  const old=mg.team;mg.fired=true;mg.firedFrom=old;mg.why=why;mg.offers=[];mg.rep=Math.max(0,(mg.rep??10)-8);
+  const old=mg.team;mg.fired=true;mg.resigned=false;mg.wait=0;mg.firedFrom=old;mg.why=why;mg.offers=[];mg.rep=Math.max(0,(mg.rep??10)-8);
   mg.jobs=pickClubs(mg,'down',3);ensureCoaches();
   news(`${mg.name} foi demitido do ${T(old).name}.`,[old])}
 function takeJob(mg,tid){
-  const old=mg.team;mg.team=tid;mg.conf=55;mg.since=absMd();mg.fired=false;mg.offers=[];mg.jobs=null;
+  const old=mg.team;mg.team=tid;mg.conf=55;mg.since=absMd();mg.fired=false;mg.resigned=false;mg.wait=0;mg.offers=[];mg.jobs=null;
   const t=T(tid);t.sled={};t.cash0=t.cash;t.sledFrom=S.md;t.lineup=bestXI(t,[4,4,2]);t.tactic='E';mg.goal=makeGoal(t);mg.late=mg.goal.late?S.season:null;(mg.career=mg.career||[]).push({tid,name:t.name,from:S.season});if(!t.spon&&!t.sOffers.length)t.sOffers=sponsorOffers(t);
   news(`${mg.name} é o novo técnico do ${t.name}.`,[tid]);
   if(old!=null&&old!==tid)T(old).lineup=[];
@@ -1307,8 +1311,8 @@ function save(){if(!S)return false;
     const first=!SAVE_ERR;SAVE_ERR=isQuota(e)?'O armazenamento do navegador está cheio.':'O navegador não permitiu salvar (modo privado ou armazenamento bloqueado).';if(first)toast('Atenção: o jogo NÃO foi salvo.');return false}}
 try{window.addEventListener('storage',e=>{if(e.key===SAVE_KEY&&S&&e.newValue!=null){OTHER_TAB=true;SAVE_ERR='O jogo foi salvo em outra aba ou janela. Para não apagar aquele progresso, esta aba parou de salvar: recarregue a página.';render()}})}catch(e){}
 function readKey(k){try{return localStorage.getItem(k)}catch(e){return null}}
-function loadSaved(){const s=readKey(SAVE_KEY);if(!s)return null;try{return JSON.parse(s)}catch(e){return null}}
-function saveState(){const s=readKey(SAVE_KEY);if(!s)return 'none';try{const o=JSON.parse(s);return validState(o)?'bad':'ok'}catch(e){return 'bad'}}
+function loadSaved(k){const s=readKey(k||SAVE_KEY);if(!s)return null;try{return JSON.parse(s)}catch(e){return null}}
+function saveState(k){const s=readKey(k||SAVE_KEY);if(!s)return 'none';try{const o=JSON.parse(s);return validState(o)?'bad':'ok'}catch(e){return 'bad'}}
 function hasSave(){return saveState()!=='none'}
 function backup(){const s=readKey(SAVE_KEY);if(!s)return;try{const o=JSON.parse(s);if(validState(o))return;localStorage.setItem(BAK_KEY,s)}catch(e){}}
 function bakInfo(){const s=readKey(BAK_KEY);if(!s)return null;try{const o=JSON.parse(s);if(validState(o))return null;const m=(o.managers||[]).find(x=>!x.out);const t=m&&m.team!=null&&o.teams[m.team];return {season:o.season,md:o.md,team:t?t.name:'—'}}catch(e){return null}}
@@ -1384,23 +1388,24 @@ const note=s=>`<span class="muted" style="font-size:13px">${s}</span>`;
 function meter(v,col,label){return `<div class="meter" role="meter" aria-valuenow="${Math.round(v)}" aria-valuemin="0" aria-valuemax="100" aria-label="${label}"><span style="width:${v}%;background:${col}"></span></div>`}
 
 /* ---------- abertura ---------- */
-function savedCard(){const o=loadSaved();if(!o)return '';try{const ms=(o.managers||[]).filter(m=>!m.out);const m=ms[0];if(!m)return '';const t=m.team!=null&&!m.fired?o.teams[m.team]:null;
+function savedCard(i){const o=loadSaved(SLOTK[i]);if(!o)return '';try{const ms=(o.managers||[]).filter(m=>!m.out);const m=ms[0];if(!m)return '';const t=m.team!=null&&!m.fired?o.teams[m.team]:null;
     const L=(o.cal||[]).length;const div=t?t.div:null;let pos=null;if(t&&o.tab&&o.tab[t.id]){const same=o.teams.filter(x=>x.div===div&&(!(o.fmt===2&&div===3)||x.dg===t.dg)&&o.tab[x.id]);same.sort((a,b)=>(o.tab[b.id].pts-o.tab[a.id].pts)||((o.tab[b.id].gp-o.tab[b.id].gc)-(o.tab[a.id].gp-o.tab[a.id].gc)));pos=same.findIndex(x=>x.id===t.id)+1}
     const c=t?`<span class="crest lg${t.color2?' two':''}" style="--c:${t.color};--c2:${t.color2||t.color}" aria-hidden="true">${esc(t.short)}</span>`:'';
-    return `<div class="panel stack savedc">${t?`<div class="row" style="flex-wrap:nowrap">${c}<div style="min-width:0"><span class="label">Sua carreira</span><b style="font:800 24px var(--display);display:block;line-height:1.1">${esc(t.name)}</b><span class="muted" style="font-size:14px">${esc(m.name)} · ${DIVN[div]||''}${pos&&o.tab[t.id].j?` · ${pos}º lugar`:''}</span></div></div>`:`<b>${esc(m.name)}</b><span class="muted">Desempregado, esperando propostas</span>`}
+    return `<div class="panel stack savedc">${t?`<div class="row" style="flex-wrap:nowrap">${c}<div style="min-width:0"><span class="label">Jogo ${i+1}</span><b style="font:800 24px var(--display);display:block;line-height:1.1">${esc(t.name)}</b><span class="muted" style="font-size:14px">${esc(m.name)} · ${DIVN[div]||''}${pos&&o.tab[t.id].j?` · ${pos}º lugar`:''}</span></div></div>`:`<b>${esc(m.name)}</b><span class="muted">Desempregado, esperando propostas</span>`}
       <span class="muted" style="font-size:14px">Temporada ${o.season} · data ${Math.min((o.md||0)+1,L)} de ${L}${ms.length>1?` · ${ms.length} técnicos`:''}${t?` · caixa ${money(t.cash)}`:''}</span>
-      <button class="btn primary big" data-act="continue">Continuar carreira</button></div>`}catch(e){return ''}}
+      <div class="row"><button class="btn primary" data-act="continue" data-slot="${i}">Continuar</button><button class="btn sm" data-act="setup" data-slot="${i}">Novo jogo aqui</button><button class="btn sm danger" data-act="slotDel" data-slot="${i}">Apagar</button></div>
+      ${UI.delSlot===i?`<div class="spread"><span class="warn">Apagar o Jogo ${i+1}? Fica uma cópia de segurança.</span><div class="row"><button class="btn sm danger" data-act="slotDelYes" data-slot="${i}">Apagar</button><button class="btn sm" data-act="slotDelNo">Cancelar</button></div></div>`:''}</div>`}catch(e){return ''}}
+function slotCard(i){const st=saveState(SLOTK[i]);if(st==='ok')return savedCard(i);
+  return `<div class="panel stack"><span class="label">Jogo ${i+1}</span><span class="muted" style="font-size:14px">${st==='bad'?'O jogo salvo neste espaço está danificado.':'Espaço livre.'}</span>
+    <div class="row"><button class="btn ${st==='none'?'primary':''}" data-act="setup" data-slot="${i}">Novo jogo</button><button class="btn sm" data-act="importOpen" data-slot="${i}">Importar aqui</button>${st==='bad'?`<button class="btn sm danger" data-act="slotDelYes" data-slot="${i}">Limpar</button>`:''}</div></div>`}
 function renderStart(){
-  const st=saveState();const can=st==='ok';const bk=bakInfo();
+  const st=UI.loadErr?'bad':'ok';const bk=bakInfo();
   return `<section class="hero stack">
     <span class="label">Gerente de futebol</span>
     <h1>Prancheta<br>FC</h1>
-    ${can?savedCard():`<p>Assuma um clube da Série D, monte o time, negocie jogadores, cuide do caixa e do estádio e tente chegar ao topo antes que a diretoria perca a paciência.</p>`}
-    <div class="row" style="max-width:520px">
-      ${can?`<button class="btn" data-act="setup">Novo jogo</button>`:`<button class="btn primary big" data-act="setup">Novo jogo</button>`}
-      <button class="btn" data-act="importOpen">Importar jogo</button>
-    </div>
-    ${can?note('Novo jogo pede confirmação antes de substituir a carreira salva, e ela fica guardada como cópia de segurança.'):''}
+    ${[0,1].some(i=>saveState(SLOTK[i])==='ok')?'':`<p>Assuma um clube da Série D, monte o time, negocie jogadores, cuide do caixa e do estádio e tente chegar ao topo antes que a diretoria perca a paciência.</p>`}
+    <div class="stack" style="max-width:520px">${slotCard(0)}${slotCard(1)}</div>
+    ${note('São dois espaços de jogo neste navegador. Novo jogo num espaço ocupado pede confirmação, e o jogo substituído fica como cópia de segurança.')}
     ${st==='bad'||UI.loadErr?`<div class="panel stack" role="alert" style="border-color:var(--danger);max-width:520px"><b>⚠ ${esc(UI.loadErr||'O jogo salvo neste navegador está danificado.')}</b><span style="font-size:14px">${bk?'Você pode restaurar a cópia de segurança ou importar um código/arquivo exportado.':'Você pode importar um código ou arquivo exportado antes.'}</span></div>`:''}
     ${bk&&(st!=='ok'||UI.loadErr)?`<button class="btn" data-act="restoreBak" style="max-width:520px">Restaurar cópia de segurança · ${esc(bk.team)}, temporada ${bk.season}</button>`:''}
   </section>`}
@@ -2091,6 +2096,8 @@ function renderClube(){
      ${(()=>{const a=attEst(t);return note(`Estimativa por jogo em casa: ${a.toLocaleString('pt-BR')} torcedores (${Math.round(a/t.cap*100)}% do estádio), bilheteria de ${money(a*t.price)}. Referência na ${DIVN[t.div]}: R$ ${PRICE[t.div]}; acima de R$ ${Math.round(PRICE[t.div]*1.3)} a torcida reclama.`)})()}
      <span class="label">Preço por jogo</span><div class="seg" role="group"><button data-act="autoP" data-v="1" aria-pressed="${t.autoP!==false}">Automático</button><button data-act="autoP" data-v="0" aria-pressed="${t.autoP===false}">Sempre o mesmo</button></div>
      ${note(t.autoP===false?'O ingresso fica sempre no preço acima. Jogos grandes continuam atraindo mais gente.':'O preço acima é a base. Em jogos grandes ele sobe sozinho, e a procura também: final +80%, semifinal +40%, clássico +30%, outros mata-matas +20%, visitante de torcida grande ou briga por título/acesso nas últimas rodadas +15% (vale só o maior). Jogo sem nada em disputa ou time em má fase: −15%. A torcida só reclama do preço base.')}`)}
+   ${(UI.cv||'fin')!=='ger'?'':`<div class="panel stack"><span class="label">Deixar o clube</span>${note(`Você fica sem clube e recebe propostas de acordo com a sua reputação (${me().rep??0}). Clubes de torcida grande ou gigante exigem 60. ${S.over?'Com a temporada encerrada, sair não custa nada.':'Sair no meio da temporada custa 3 pontos de reputação; no fim da temporada, nada.'}`)}
+     ${UI.resign?`<div class="spread"><span class="warn">Pedir demissão do ${esc(myTeam().name)}?</span><div class="row"><button class="btn sm danger" data-act="resignYes">Pedir demissão</button><button class="btn sm" data-act="resignNo">Cancelar</button></div></div>`:`<button class="btn danger" data-act="resignAsk" style="align-self:flex-start">Pedir demissão</button>`}</div>`}
    ${(UI.cv||'fin')!=='ger'?'':fold('cpool','Técnicos sem clube',`<span class="muted">${coachPool().length}</span>`,'',coachPool().slice().sort((a,b)=>b.rep-a.rep).map(c=>`<div class="spread offer"><span style="font-size:14px"><b>${esc(c.name)}</b>${c.last?` <span class="muted">· ex-${esc(c.last)}</span>`:''}<br><span class="muted" style="font-size:13px">prefere ${STYLES[c.sty][0].toLowerCase()} e postura ${TACN[c.tac].toLowerCase()}</span></span><span class="muted" style="font-size:13px">reputação ${c.rep}</span></div>`).join('')+note('Quando um clube troca de técnico, contrata um destes. Você só recebe proposta de clubes melhores que o seu.'))}
    ${(UI.cv||'fin')!=='ger'?'':(S.papers&&S.papers.length?fold('papers','Jornais anteriores',`<span class="muted">${S.papers.length}</span>`,'',S.papers.map((p,i)=>`<div class="spread offer"><span style="font-size:14px">T${p.season} · ${esc(p.label)}<br><b>${esc(p.head.txt)}</b></span><button class="btn sm" data-act="paperOpen" data-i="${i}">Ler</button></div>`).join('')):'')}
    ${(UI.cv||'fin')!=='ger'?'':fold('news','Notícias',`<span class="muted">${myNews.length}</span>`,'',`<div class="seg" role="group" aria-label="Quais notícias"><button data-act="newsAll" data-v="0" aria-pressed="${!UI.newsAll}">Seu clube</button><button data-act="newsAll" data-v="1" aria-pressed="${!!UI.newsAll}">Todas</button></div><ul class="news">${myNews.map(n=>{const k=newsKind(n.text);return `<li><small>${k?`<span class="nk" style="color:${k[1]}">${k[0]}</span> · `:''}Temp. ${n.s} · data ${n.md+1}</small>${esc(n.text)}</li>`}).join('')||'<li class="muted">Sem notícias por enquanto. Elas aparecem a cada data.</li>'}</ul>`)}
@@ -2109,8 +2116,8 @@ function renderClube(){
      <div class="spread"><span class="muted" style="font-size:13px">Dicas na tela: ${UI.prefs.tipsOff?'desligadas':'ligadas'}</span><button class="btn sm" data-act="${UI.prefs.tipsOff?'tipsOn':'tipsOff'}">${UI.prefs.tipsOff?'Mostrar dicas de novo':'Desligar dicas'}</button></div>`)}
    ${(UI.cv||'fin')!=='cfg'?'':fold('save','Clube e jogo salvo','','',`
      <div class="row" style="flex-wrap:nowrap"><input id="rename" value="${esc(t.name)}" maxlength="30" aria-label="Nome do clube"><button class="btn" data-act="rename">Renomear</button></div>
-     ${note(`Dificuldade: ${dff().n}. O jogo salva sozinho neste navegador${SAVE_ERR?' — <b style="color:var(--danger)">mas o último salvamento falhou</b>':LAST_SAVE?` (último: ${new Date(LAST_SAVE.t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}, ${LAST_SAVE.kb} KB)`:''}. ${S.lastExp?`Última exportação: temporada ${S.lastExp}.`:'Você ainda não exportou este jogo.'} Para outro aparelho, exporte o jogo. Uma cópia de segurança é guardada a cada virada de temporada e antes de importar ou começar outro jogo.`)}
-     <div class="row"><button class="btn" data-act="exportOpen">Exportar jogo</button><button class="btn" data-act="importOpen">Importar jogo</button><button class="btn danger" data-act="newGame">Novo jogo</button></div>
+     ${note(`Dificuldade: ${dff().n}. Este é o Jogo ${SLOT+1} de 2. O jogo salva sozinho neste navegador${SAVE_ERR?' — <b style="color:var(--danger)">mas o último salvamento falhou</b>':LAST_SAVE?` (último: ${new Date(LAST_SAVE.t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}, ${LAST_SAVE.kb} KB)`:''}. ${S.lastExp?`Última exportação: temporada ${S.lastExp}.`:'Você ainda não exportou este jogo.'} Para outro aparelho, exporte o jogo. Uma cópia de segurança é guardada a cada virada de temporada e antes de importar ou começar outro jogo.`)}
+     <div class="row"><button class="btn" data-act="exportOpen">Exportar jogo</button><button class="btn" data-act="importOpen">Importar jogo</button><button class="btn" data-act="toMenu">Trocar de jogo</button><button class="btn danger" data-act="newGame">Novo jogo</button></div>
      ${(()=>{const b=bakInfo();return b?`<div class="spread"><span class="muted" style="font-size:13px">Cópia de segurança: ${esc(b.team)}, temporada ${b.season}, data ${b.md+1}</span><button class="btn sm" data-act="restoreAsk">Restaurar</button></div>${UI.confirmBak?`<div class="spread"><span class="warn">O jogo atual será trocado pela cópia.</span><div class="row"><button class="btn sm danger" data-act="restoreBak">Restaurar</button><button class="btn sm" data-act="restoreNo">Cancelar</button></div></div>`:''}`:''})()}
      ${UI.confirmNew?`<div class="spread" style="border-top:1px solid var(--line);padding-top:10px"><span class="warn">O jogo atual será substituído (fica uma cópia de segurança).</span><div class="row"><button class="btn danger" data-act="newGameYes">Apagar e recomeçar</button><button class="btn" data-act="newGameNo">Cancelar</button></div></div>`:''}`,UI.confirmNew)}
   </section>`}
@@ -2563,13 +2570,17 @@ function renderStartPick(){const m=me();
 function renderFired(){
   const m=me();if(m.jobs&&m.jobs.some(id=>!T(id)||T(id).div>=5||isHuman(id))){m.jobs=m.jobs.filter(id=>T(id)&&T(id).div<5&&!isHuman(id));if(!m.jobs.length)m.jobs=pickClubs(m,'down',3)}
   return `<section class="stack">
-   <div class="panel stack" style="border-color:var(--danger)"><span class="label" style="color:var(--danger)">Demitido</span>
+   ${m.resigned?`<div class="panel stack" style="border-color:var(--warn)"><span class="label" style="color:var(--warn)">Sem clube</span>
+    <h2 class="h-sec" style="font-size:30px">${esc(m.name)}, você deixou o ${esc(T(m.firedFrom).name)}</h2>
+    <p style="margin:0">Sua reputação é ${m.rep??0} (${repLabel(m.rep??0).toLowerCase()}). Só chamam você clubes que exigem até essa reputação: Série C 15 · Série B 30 · Série A 45 · torcida grande ou gigante 60.</p></div>`
+   :`<div class="panel stack" style="border-color:var(--danger)"><span class="label" style="color:var(--danger)">Demitido</span>
     <h2 class="h-sec" style="font-size:30px">${esc(m.name)}, você não é mais técnico do ${esc(T(m.firedFrom).name)}</h2>
-    <p style="margin:0">${esc(m.why||'')} Sua reputação caiu para ${m.rep??0} (${repLabel(m.rep??0).toLowerCase()}), então só clubes menores se interessam por enquanto.</p></div>
+    <p style="margin:0">${esc(m.why||'')} Sua reputação caiu para ${m.rep??0} (${repLabel(m.rep??0).toLowerCase()}), então só clubes menores se interessam por enquanto.</p></div>`}
    <div class="panel stack"><span class="label">Clubes interessados</span>
     ${(m.jobs||[]).filter(id=>!isHuman(id)).map(id=>`<div class="spread"><div class="row">${crest(id)}<span><b>${esc(T(id).name)}</b><br><span class="muted" style="font-size:13px">${clubInfo(id)}</span><br><span class="muted" style="font-size:13px">${goalPrev(id)}</span></span></div>
       <div class="row"><button class="btn sm" data-act="teamView" data-tid="${id}">Elenco e tabela</button><button class="btn primary sm" data-act="job" data-tid="${id}">Assumir</button></div></div>`).join('')||'<p class="muted" style="margin:0">Nenhum clube fez proposta.</p>'}
    </div>
+   ${S.managers.filter(x=>!x.out).every(x=>x.fired)?`<div class="panel stack"><button class="btn" data-act="waitDate" style="align-self:flex-start">${S.over?'Ver o fim da temporada':'Esperar a próxima data'}</button>${note(`As propostas mudam a cada data. Cada 5 datas sem clube custam 1 ponto de reputação${m.wait?` (você está parado há ${m.wait} data${m.wait>1?'s':''})`:''}.`)}</div>`:''}
    <button class="btn danger" data-act="retire">Encerrar a carreira deste técnico</button>
   </section>`}
 function renderGameOver(){return `<section class="hero stack"><span class="label">Fim de carreira</span><h1>Apito final</h1>
@@ -2624,7 +2635,7 @@ function renderModal(){
      <p class="muted">Guarde este código ou baixe o arquivo. Em outro aparelho, use “Importar jogo” para continuar de onde parou.</p>
      <textarea id="exportbox" readonly>${exportCode()}</textarea><div class="row" style="margin-top:10px"><button class="btn primary" data-act="copyExport">Copiar</button><button class="btn" data-act="exportFile">Baixar arquivo</button></div>`}
   else if(sh.type==='import'){html=`<div class="spread"><h3 style="font-size:24px">Importar jogo</h3><button class="btn sm" data-act="close">Fechar</button></div>
-     <p class="muted">Cole o código exportado ou escolha o arquivo baixado. O conteúdo é conferido antes: se houver problema, seu jogo atual continua intacto. Se der certo, o jogo atual vira a cópia de segurança.</p>
+     <p class="muted">Cole o código exportado ou escolha o arquivo baixado. O conteúdo é conferido antes: se houver problema, seu jogo atual continua intacto. Se der certo, ele entra no <b>Jogo ${SLOT+1}</b> e o que estava lá vira a cópia de segurança.</p>
      <label class="btn sm" style="align-self:flex-start;margin-bottom:8px">Escolher arquivo<input type="file" accept=".txt,.json,text/plain,application/json" data-in="importfile" style="display:none"></label>
      <textarea id="importbox" placeholder="Cole o código aqui"></textarea>${sh.msg?`<p class="warn">${esc(sh.msg)}</p>`:''}
      <div class="row" style="margin-top:10px"><button class="btn primary" data-act="doImport">Carregar jogo</button></div>`}
@@ -2632,7 +2643,7 @@ function renderModal(){
 
 /* ============ ações ============ */
 const ACT={
-  setup(){UI.setup={mode:'offers',n:1,mgrs:[0,1,2,3].map(i=>({name:'Técnico '+(i+1),team:30+i})),names:NAMES2.map(d=>d.slice())};render()},
+  setup(d){if(d&&d.slot!=null)setSlot(+d.slot);UI.setup={mode:'offers',n:1,mgrs:[0,1,2,3].map(i=>({name:'Técnico '+(i+1),team:30+i})),names:NAMES2.map(d=>d.slice())};render()},
   setupBack(){UI.setup=null;render()},
   setupN(d){UI.setup.n=+d.n;render()},
   setupDiff(d){UI.setup.diff=d.v;render()},
@@ -2650,7 +2661,7 @@ const ACT={
     const t=T(id);if(!t.startCash&&S.season===1){t.cash=r1k(t.cash*(dff().cash||1));t.startCash=1}t.sled={};t.cash0=t.cash;t.sledFrom=0;t.lineup=bestXI(t,[4,4,2]);m.career=[{tid:id,name:t.name,from:S.season}];m.goal=makeGoal(t);delete m.start;
     ensureCoaches();news(`${m.name} assume o comando do ${t.name}. A diretoria espera um bom trabalho.`,[id]);
     const n=S.managers.findIndex(x=>x.start&&!x.out);UI.cur=n>=0?n:0;UI.tab='jogo';save();render();window.scrollTo(0,0);toast(`Bem-vindo ao ${t.name}!`)},
-  continue(){const s=loadSaved();if(!s){UI.loadErr='O jogo salvo está danificado e não pode ser aberto.';render();return}try{S=prepState(s);UI.cur=Math.max(0,S.managers.findIndex(m=>!m.out));UI.tab='jogo';UI.loadErr=null;render();resumeLive()}catch(e){S=null;UI.loadErr=`O jogo salvo não pôde ser aberto: ${e.message}.`;render()}},
+  continue(d){if(d&&d.slot!=null)setSlot(+d.slot);const s=loadSaved();if(!s){UI.loadErr='O jogo salvo está danificado e não pode ser aberto.';render();return}try{S=prepState(s);UI.cur=Math.max(0,S.managers.findIndex(m=>!m.out));UI.tab='jogo';UI.loadErr=null;render();resumeLive()}catch(e){S=null;UI.loadErr=`O jogo salvo não pôde ser aberto: ${e.message}.`;render()}},
   style(d){const t=myTeam();t.style=d.v;save();render();if(!d.q)toast('Estilo: '+STYLES[d.v][0])},
   liveStyle(d){T(+d.tid).style=d.v;render()},
   clv(d){UI.cv=d.v;UI.tab='clube';UI.sheet=null;if(myTeam())(clubPend(myTeam())[d.v]||[]).forEach(f=>UI.folds[f]=true);render();window.scrollTo(0,0)},
@@ -2803,12 +2814,18 @@ const ACT={
   endSeason(){if(!S.over||S.summary)return;endSeason();render();window.scrollTo(0,0)},
   summaryOk(){S.summary=null;save();UI.tab=S.managers[UI.cur]?.fired?'jogo':(S.managers[UI.cur]?.offers.length||myTeam()?.sOffers.length?'clube':'jogo');render();window.scrollTo(0,0)},
   job(d){const m=me(),t=T(+d.tid);if(!m||!m.fired||!t||t.div>=5||isHuman(t.id)||!(m.jobs||[]).includes(t.id)){toast('Esta proposta não está mais disponível.');if(m&&m.fired){m.jobs=pickClubs(m,'down',3);save()}render();return}takeJob(m,t.id);UI.tab='jogo';render()},
+  waitDate(){const m=me();if(!m||!m.fired)return;if(S.over){ACT.endSeason();return}m.wait=(m.wait||0)+1;if(m.wait%5===0)m.rep=Math.max(0,(m.rep??10)-1);
+    startMatchday();const mm=S.managers.find(x=>x===m);if(mm&&mm.fired)mm.jobs=mm.resigned?resignJobs(mm):pickClubs(mm,'down',3);save();render()},
+  resignAsk(){UI.resign=true;render()},resignNo(){UI.resign=false;render()},
+  resignYes(){const m=me(),t=myTeam();if(!m||!t)return;const pen=S.over?0:3;UI.resign=false;m.rep=Math.max(0,(m.rep??10)-pen);m.fired=true;m.resigned=true;m.firedFrom=t.id;m.why='';m.offers=[];m.wait=0;
+    t.pOffers=[];t.lOffers=[];t.sOffers=[];t.nOffers=[];squad(t).forEach(p=>{delete p.sale;delete p.lendAsk});t.lineup=bestXI(t,[4,4,2]);S.decReq=[];UI.flow=false;
+    m.jobs=resignJobs(m);ensureCoaches();news(`${m.name} pede demissão do ${t.name}.${t.coach?` ${t.coach.name}${coachFrom(t.coach)} assume.`:''}`,[t.id]);save();UI.tab='jogo';render();window.scrollTo(0,0)},
   retire(){const m=me();m.out=true;m.fired=false;const n=S.managers.findIndex(x=>!x.out);UI.cur=n<0?0:n;save();render()},
   rename(){const t=myTeam();const v=$('#rename').value.trim();if(!v)return;t.name=v;t.short=shortOf(v);t.baseStadium='Estádio '+v;if(!t.nr)t.stadium=t.baseStadium;save();render();toast('Clube renomeado.')},
   exportOpen(){UI.sheet={type:'export'};renderModal()},
   copyExport(){const ta=$('#exportbox');const txt=ta.value;
     S.lastExp=S.season;save();try{navigator.clipboard.writeText(txt).then(()=>toast('Código copiado.'),()=>{ta.select();toast('Selecionado. Copie com o menu do aparelho.')})}catch(e){ta.select();toast('Selecionado. Copie com o menu do aparelho.')}},
-  importOpen(){UI.sheet={type:'import'};renderModal()},
+  importOpen(d){if(!S&&d&&d.slot!=null)setSlot(+d.slot);UI.sheet={type:'import'};renderModal()},
   doImport(){try{const ns=importCode($('#importbox').value);backup();S=ns;UI.sheet=null;UI.setup=null;UI.cur=Math.max(0,S.managers.findIndex(m=>!m.out));UI.tab='jogo';UI.live=null;save();render();if(!resumeLive())toast('Jogo carregado.')}
     catch(e){UI.sheet.msg=`Não foi possível importar: ${e&&e.message?e.message:'código inválido'}. Seu jogo atual não foi alterado.`;renderModal()}},
   async exportFile(){const name=`prancheta-fc-T${S.season}.txt`,code=exportCode();
@@ -2821,6 +2838,10 @@ const ACT={
   restoreAsk(){UI.confirmBak=true;render()},
   restoreNo(){UI.confirmBak=false;render()},
   newGameNo(){UI.confirmNew=false;render()},
+  slotDel(d){UI.delSlot=+d.slot;render()},
+  slotDelNo(){UI.delSlot=null;render()},
+  slotDelYes(d){const cur=SLOT;setSlot(+d.slot);backup();try{localStorage.removeItem(SAVE_KEY)}catch(e){}setSlot(cur);UI.delSlot=null;render();toast('Espaço apagado.')},
+  toMenu(){save();if(UI.live&&UI.live.timer)clearTimeout(UI.live.timer);S=null;UI={...UI,live:null,sheet:null,setup:null,confirmNew:false,flow:false,tab:'jogo'};render();window.scrollTo(0,0)},
   newGameYes(){backup();try{localStorage.removeItem(SAVE_KEY)}catch(e){}S=null;UI={...UI,confirmNew:false,live:null,sheet:null,tab:'jogo'};ACT.setup()}
 };
 document.addEventListener('click',ev=>{const el=ev.target.closest('[data-act]');if(!el||el.disabled)return;const f=ACT[el.dataset.act];if(f)f(el.dataset,el,ev)});
