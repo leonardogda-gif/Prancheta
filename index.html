@@ -1027,7 +1027,16 @@ function finishMatchday(){applyFmt();
         m.ev.filter(x=>x.type==='goal'&&(x.side==='h')===(sd===m.h)).forEach(x=>{rc.g[x.pid]=(rc.g[x.pid]||0)+1;rc.n[x.pid]=P(x.pid).name});
         if(f-c>0&&(!rc.win||f-c>rc.win.f-rc.win.c||(f-c===rc.win.f-rc.win.c&&f>rc.win.f)))rc.win={f,c,opp:T(sd===m.h?ta.id:th.id).name,s:S.season,comp:COMPN[m.comp]};
         const mg=mgrOf(t.id);if(mg){mg.stats=mg.stats||{j:0,v:0,e:0,d:0};mg.stats.j++;if(f>c)mg.stats.v++;else if(f<c)mg.stats.d++;else mg.stats.e++}}}
-    for(const sd of [m.h,m.a]){const Rp=rep[sd.tid];if(!Rp)continue;Rp.derby=m.derby;
+    for(const sd of [m.h,m.a]){const Rp=rep[sd.tid];if(!Rp)continue;const mg=mgrOf(sd.tid);if(mg){const me_=T(sd.tid),op=T(sd===m.h?m.a.tid:m.h.tid);const f0=sd===m.h?hg:ag,c0=sd===m.h?ag:hg;
+        let r0=f0>c0?'V':f0<c0?'D':'E';if(r0==='E'&&m.pens)r0=(m.pens[sd===m.h?0:1]>m.pens[sd===m.h?1:0])?'V':'D';const diff=teamRating(op)-teamRating(me_);let g=0;const why=[];
+        if(r0==='V'&&diff>=3){g+=clamp(.5+(diff-3)*.15,.5,1.5);why.push('vitória contra time mais forte')}
+        if(r0==='E'&&!m.pens&&diff>=6){g+=clamp(.3+(diff-6)*.08,.3,.8);why.push('empate com time mais forte')}
+        if(m.derby&&r0==='V'){g+=1;why.push('vitória no clássico')}else if(m.derby&&r0==='E'&&!m.pens&&sd===m.a){g+=.3;why.push('empate no clássico fora de casa')}
+        if(KO.has(m.comp)&&r0==='V'&&!op.foreign&&op.div<me_.div){g+=1;why.push('eliminou clube de divisão acima')}
+        if(r0==='D'&&diff<=-6){g-=.5;why.push('derrota para time mais fraco')}
+        if(g>0)g=Math.min(g,1.5,Math.max(0,12-(mg.repS||0)));
+        if(g){g=Math.round(g*10)/10;if(g>0)mg.repS=Math.round(((mg.repS||0)+g)*10)/10;mg.repX=(mg.repX||0)+g;while(mg.repX>=1){mg.rep=clamp((mg.rep??10)+1,0,100);mg.repX-=1}while(mg.repX<=-1){mg.rep=clamp((mg.rep??10)-1,0,100);mg.repX+=1}mg.repX=Math.round(mg.repX*10)/10;Rp.repG=[g,why.join(', ')]}}
+      Rp.derby=m.derby;
       Rp.match={h:th.id,a:ta.id,hg,ag,pens:m.pens,comp:m.comp,ev:m.ev.filter(x=>x.type==='goal').map(x=>[x.min,x.side,x.pid]),st:m.st?{h:{...m.st.h},a:{...m.st.a}}:null,sty:[th.style||'N',ta.style||'N'],tac:[th.tactic,ta.tactic],cards:m.ev.filter(x=>x.type==='y'||x.type==='r').map(x=>[x.side,x.type]),subs:m.ev.filter(x=>x.type==='sub').map(x=>[x.min,x.side,x.pid,x.pid2])};
       Rp.rat=Object.entries(sd.rat).sort((a,b)=>b[1]-a[1]);Rp.xi=sd.played.slice(0,11);Rp.side=sd===m.h?'h':'a';
       if(!m.neutral&&th.id===sd.tid)Rp.att=m.att;
@@ -1120,15 +1129,16 @@ function expectedPos(t){return S.teams.filter(x=>x.div===t.div&&!(F2()&&t.div===
 function clubInfo(id){const t=T(id);const pos=tabOf(t).findIndex(x=>x.id===id)+1;
   return `${DIVN[t.div]} · ${pos}º · força ${teamRating(t)} · torcida ${GRN[grOf(t)].toLowerCase()} · ${t.cap.toLocaleString('pt-BR')} lugares · caixa ${money(t.cash)} · público potencial ${t.fans.toLocaleString('pt-BR')}${S.kParts&&S.kParts.includes(id)?' · na Continental':''}`}
 function repLabel(r){return r>=75?'Lenda':r>=50?'Renomado':r>=30?'Respeitado':r>=15?'Promissor':'Desconhecido'}
-function repNeed(t){const top=t.div===0&&S.teams.filter(x=>x.div===0).sort((a,b)=>teamRating(b)-teamRating(a)).slice(0,4).includes(t);return [55,35,15,0,0,0][t.div]+(top?20:0)}
+function repNeed(t){const big=grOf(t)>=4&&t.div<=1;return big?Math.max(60-(t.div?15:0),[45,30,15,0,0,0][t.div]):[45,30,15,0,0,0][t.div]}
+function effRep(mg,pos){const t=mg.team!=null?T(mg.team):null;let p=pos;if(p==null&&t){const tb=tabOf(t);p=S.tab[t.id]&&S.tab[t.id].j>=3?tb.findIndex(x=>x.id===t.id):null}return (mg.rep??10)+(p!=null&&p<=1&&t&&t.div<5?10:0)}
 function pickClubs(mg,mode,n,fallen=[]){
   const cur=mg.team!=null?T(mg.team):null;const curDiv=cur?cur.div:3;
   let pool=S.teams.filter(t=>!isHuman(t.id)&&t.id!==mg.team&&!t.foreign&&t.div<5);
-  const rep=mg.rep??10;
+  const rep=mode==='up'?effRep(mg,mg.endPos):(mg.rep??10);
   if(mode==='up'){if(cur&&mg.since!=null&&absMd()-mg.since<30)return [];
     const fl=pool.filter(t=>fallen.includes(t.id)&&cur&&t.div>=curDiv-1&&t.div<=curDiv&&teamRating(t)>teamRating(cur)&&repNeed(t)<=rep);
-    const hi=pool.filter(t=>!fallen.includes(t.id)&&(curDiv===0?(t.div===0&&teamRating(t)>teamRating(cur)):(t.div===curDiv-1||(t.div===curDiv-2&&rep>=60)))&&repNeed(t)<=rep);
-    return [...shuffle(fl),...shuffle(hi)].slice(0,n).map(t=>t.id)}
+    const hi=pool.filter(t=>!fallen.includes(t.id)&&(curDiv===0?(t.div===0&&teamRating(t)>teamRating(cur)&&grOf(t)>=grOf(cur)):(t.div===curDiv-1||(t.div===curDiv-2&&rep>=60)))&&repNeed(t)<=rep);
+    return [...shuffle(fl),...shuffle(hi).sort((a,b)=>grOf(b)-grOf(a))].slice(0,n).map(t=>t.id)}
   else{let p2=pool.filter(t=>t.div>=Math.min(3,curDiv)&&repNeed(t)<=rep+5);if(!p2.length)p2=pool.filter(t=>t.div===3);pool=p2}
   return shuffle(pool).slice(0,n).map(t=>t.id)}
 function fire(mg,why){
@@ -1223,7 +1233,7 @@ function endSeason(){
   S.managers.forEach(mg=>{if(mg.out||mg.fired)return;
     if(sum.out.includes(mg.team)){fire(mg,'O time caiu da Série D e saiu das divisões nacionais.');return}
     if(mg.conf<=12){if(mg.late===S.season){mg.conf=35;news(`A diretoria do ${T(mg.team).name} mantém ${mg.name}: ele chegou com a temporada em andamento. A cobrança começa agora.`,[mg.team])}else{fire(mg,'Temporada abaixo do esperado.');return}}
-    const t=T(mg.team);if(sum.up.includes(t.id)||(mg.endPos<=2&&t.div>0)||(t.div===0&&mg.endPos<=1)){
+    const t=T(mg.team);const wonTitle=(mg.titles||[]).some(x=>x.endsWith(' '+(S.season)));if(sum.up.includes(t.id)||(mg.endPos<=2&&t.div>0)||(t.div===0&&mg.endPos<=3)||wonTitle){
       pickClubs(mg,'up',ri(1,2),sum.down).forEach(o=>mg.offers.push({tid:o,exp:4}))}
     if(isHuman(t.id))fixLineup(t)});
   Object.values(S.players).forEach(p=>{if(p.lendAsk)delete p.lendAsk});S.teams.forEach(t=>{if(t.lOffers)t.lOffers=[]});Object.values(S.players).filter(p=>p.loan).forEach(p=>{const o=T(p.loan.owner);delete p.loan;moveP(p,o);if(isHuman(o.id))news(`${p.name} volta de empréstimo.`,[o.id])});
@@ -1248,6 +1258,7 @@ function endSeason(){
     if(isHuman(t.id)){if(t.blocNext&&t.blocNext!==t.bloc){t.bloc=t.blocNext;news(`${t.name} passa a negociar a TV pela ${BLOC[t.bloc].n}.`,[t.id])}t.blocNext=null;return}
     const want=grOf(t)>=4?'A':grOf(t)<=2?'B':t.bloc;if(want&&want!==t.bloc&&Math.random()<.15){t.bloc=want;news(`${t.name} troca de bloco e vai para a ${BLOC[want].n}.`)}
     if(t.bloc==='B'&&!t.tvInv&&t.cash<CASH[t.div]*.3&&Math.random()<.5){t.tvInv=true;credit(t,'inv',invVal(t));news(`${t.name} vende 20% da cota de TV a um investidor e recebe ${money(invVal(t))}.`)}});
+  S.managers.forEach(m=>{m.repS=0});
   {const pool=coachPool();while(pool.length<10){const c=makeCoach({div:ri(1,3)});c.last=null;pool.push(c)}}
   S.summary=sum;S.season++;newSeasonStructures();refreshMarket();setGoals();S.teams.forEach(t=>t.chem=Math.max(60,t.chem??70));
   S.managers.forEach(mg=>{if(!mg.out&&!mg.fired)mg.offers.forEach(o=>news(`Proposta: o ${T(o.tid).name} quer contratar ${mg.name} para a nova temporada.`,[mg.team]))});
@@ -1682,6 +1693,7 @@ function releaseCoach(c,t,quiet){if(!c)return;c.last=t.name;if(!quiet)c.rep=Math
 const coachFrom=c=>c&&c.last?`, ex-${c.last},`:', que estava sem clube,';
 const betterClub=(t,mt)=>{if(t.div!==mt.div)return t.div<mt.div;const tb=tabOf(t),pt=tb.findIndex(x=>x.id===t.id),pm=tabOf(mt).findIndex(x=>x.id===mt.id);
   const played=S.tab[t.id]&&S.tab[t.id].j>0;const sameTab=!(F2()&&t.div===3)||t.dg===mt.dg;
+  const rt0=teamRating(t),rm0=teamRating(mt);if(grOf(t)>=4&&grOf(t)>=grOf(mt)&&rt0>rm0)return true;
   if(played&&pt>=tb.length-2)return false;
   const ahead=!played||!sameTab||pt<pm;const rt=teamRating(t),rm=teamRating(mt);const stronger=rt>rm||(rt===rm&&grOf(t)>grOf(mt));
   return ahead&&stronger};
@@ -1691,7 +1703,7 @@ function fireCoach(t,why,rep){const old=t.coach;const c=hireCoach(t,old);t.coach
   t.chem=Math.max(40,(t.chem??70)-8);t.mood=clamp((t.mood??60)+5,0,100);
   news(`${t.name} demite o técnico ${old?old.name:''}${why?' '+why:''}. ${c.name}${coachFrom(c)} assume e prefere ${STYLES[c.sty][0].toLowerCase()}.`);
   S.managers.forEach(mg=>{if(mg.out||mg.fired||mg.team==null||isHuman(t.id))return;const mt=T(mg.team);
-    if(!betterClub(t,mt)||t.div<mt.div-1||repNeed(t)>(mg.rep??10)||absMd()-(mg.since??0)<15||mg.offers.length>=3||mg.offers.some(o=>o.tid===t.id)||Math.random()>.6)return;
+    if(!betterClub(t,mt)||t.div<mt.div-1||repNeed(t)>effRep(mg)||absMd()-(mg.since??0)<15||mg.offers.length>=3||mg.offers.some(o=>o.tid===t.id)||Math.random()>.6)return;
     mg.offers.push({tid:t.id,exp:S.md+3});news(`O ${t.name}, que acabou de trocar de técnico, quer contratar ${mg.name}.`,[mg.team]);if(rep&&rep[mg.team])rep[mg.team].offers.push(`O ${t.name} quer você como técnico (o clube está em crise).`)})}
 function coachMoves(e,rep){if(e.t!=='L')return;let n=0;
   for(const t of shuffle(S.teams.filter(x=>!x.foreign&&x.div<4&&x.coach&&!isHuman(x.id)))){if(n>=2)break;const c=t.coach;if(absMd()-c.since<8)continue;const tb=S.tab[t.id];if(!tb||tb.j<5)continue;
@@ -1987,7 +1999,7 @@ function renderClube(){
    ${goalBanner()}
    ${(()=>{const cp=clubPend(t);return `<div class="seg" role="tablist" aria-label="Seções do clube">${[['fin','Finanças'],['ger','Gestão'],['est','Estádio'],['cfg','Ajustes']].map(([k,l])=>`<button data-act="clv" data-v="${k}" aria-pressed="${(UI.cv||'fin')===k}">${l}${cp[k].length?'<span class="pdot" aria-label="pendência"></span>':''}</button>`).join('')}</div>`})()}
    ${(UI.cv||'fin')!=='ger'?'':fold('dir','Diretoria',`<b style="color:${col}">${confLabel(mg.conf)} · ${mg.conf}</b>`,meter(mg.conf,col,'Confiança da diretoria'),note('Vitória +5, empate +1, derrota −6. Caixa negativo −4 e torcida revoltada −2 por data. O relatório de cada jogo mostra o detalhe. Em zero, você é demitido.'))}
-   ${(UI.cv||'fin')!=='ger'?'':fold('rep','Reputação',`<b>${repLabel(rep)} · ${rep}</b>`,meter(rep,'var(--info)','Reputação'),note(`Sobe com títulos e acessos; cai com rebaixamento e demissão. Para ser chamado: Série C 15 · Série B 35 · Série A 55 · grandes da A 75. Os convites vêm de uma série acima por vez, e só depois de uma temporada no cargo.${mg.titles.length?' Títulos: '+mg.titles.map(esc).join(', ')+'.':''}`))}
+   ${(UI.cv||'fin')!=='ger'?'':fold('rep','Reputação',`<b>${repLabel(rep)} · ${rep}</b>`,meter(rep,'var(--info)','Reputação'),note(`Sobe com títulos e acessos, e também jogo a jogo: vitórias contra times mais fortes, empates contra times bem mais fortes, clássicos e eliminar clubes maiores (até +12 por temporada). Cai com rebaixamento, demissão e derrotas para times bem mais fracos. Nesta temporada, pelos jogos: ${String(mg.repS||0).replace('.',',')} de 12. Para ser chamado: Série C 15 · Série B 30 · Série A 45 · clubes de torcida grande ou gigante 60. Estar entre os 2 primeiros da sua divisão conta como +10. Os convites vêm de uma série acima por vez, e só depois de uma temporada no cargo.${mg.titles.length?' Títulos: '+mg.titles.map(esc).join(', ')+'.':''}`))}
    ${(UI.cv||'fin')!=='fin'?'':renderFinance(t)}
    ${(UI.cv||'fin')!=='fin'?'':renderLoan(t)}
    ${(UI.cv||'fin')!=='cfg'?'':(()=>{const pr=UI.prefs;const sg=(k,opts)=>`<div class="seg" role="group">${opts.map(([v,l])=>`<button data-act="pref" data-k="${k}" data-v="${v}" aria-pressed="${String(pr[k]===true?'1':pr[k]===false?'0':pr[k])===String(v)}">${l}</button>`).join('')}</div>`;
@@ -2333,6 +2345,7 @@ function renderPos(){
   const resumo=`<div class="panel stack"><span class="label">Resumo</span>
     <div class="spread"><span>${DIVN[R.div]}${F2()&&R.div===3?' · grupo':''}</span><b>${pos+1}º · ${R.table[pos]?R.table[pos][1]:0} pts</b></div>
     ${R.dconf!=null?`<div class="spread"><span>Diretoria</span><b>${R.dconf>0?'+':''}${R.dconf} (${R.conf}/100)</b></div>`:''}
+    ${R.repG?`<div class="spread"><span>Reputação</span><b style="color:${R.repG[0]>0?'var(--ok)':'var(--danger)'}">${R.repG[0]>0?'+':''}${String(R.repG[0]).replace('.',',')} <small class="muted" style="font-weight:400">(${esc(R.repG[1])})</small></b></div>`:''}
     ${R.mood!=null?`<div class="spread"><span>Torcida</span><b>${moodLabel(R.mood)} ${R.dmood?`(${R.dmood>0?'+':''}${R.dmood})`:''}</b></div>`:''}
     <div class="spread"><span>Dinheiro da data</span><b>${money1(tot)}</b></div>
     ${st.length?`<ul class="news" style="margin:4px 0 0">${st.join('')}</ul>`:''}</div>`;
