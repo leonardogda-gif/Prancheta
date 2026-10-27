@@ -441,7 +441,7 @@ const CK=c=>c==='E'||c==='ES'||c==='EF'?'E':c==='C'?'C':c==='K'||c==='KQ'||c==='
 const KO=new Set(['C','ES','EF','KQ','KS','KF','M0','M1','DS','DF']);
 const COMPN={DS:'Série D',DF:'Série D',L:'Nacional',C:'Copa Nacional',E:'Estadual',ES:'Estadual',EF:'Estadual',K:'Continental',KQ:'Continental',KS:'Continental',KF:'Continental',M0:'Mundial',M1:'Mundial'};
 const COMP='Banco Horizonte|Cimentos Rocha Firme|Construtora Alicerce|Laticínios Serra Boa|Farmácias Vida Plena|Supermercados Bom Preço|Transportadora Rota Sul|Café Grão Dourado|Imobiliária Chave Certa|Auto Peças Turbo|Conecta Telecom|Calçados Passo Firme|Seguros Amparo|Pneus Rodagem|Solar Brilho Energia|Moinho Trigo Bom|Colchões Sono Leve|Tintas Arco-Íris|Água Fonte Clara|Distribuidora Norte Sul'.split('|');
-const LEDN={lfee:'Taxa de empréstimo',art:'Prêmio de artilheiro',inv:'Investidor da TV',fac:'Manutenção da estrutura',est:'Prêmios do estadual',cont:'Copa Continental',mund:'Mundial',loan:'Parcela do banco',fin:'Financeira',adv:'Antecipação da TV',gate:'Bilheteria',tv:'TV · parte fixa',tvA:'TV · audiência',tvB:'TV · desempenho',tvC:'TV · copas',spon:'Patrocínio',nr:'Naming rights',cup:'Prêmio da Copa',wages:'Salários'};
+const LEDN={lfee:'Taxa de empréstimo',art:'Prêmio de artilheiro',inv:'Investidor da TV',fac:'Manutenção da estrutura',est:'Prêmios do estadual',cont:'Copa Continental',mund:'Mundial',loan:'Parcela do banco',fin:'Financeira',adv:'Antecipação da TV',juros:'Juros do caixa negativo',gate:'Bilheteria',tv:'TV · parte fixa',tvA:'TV · audiência',tvB:'TV · desempenho',tvC:'TV · copas',spon:'Patrocínio',nr:'Naming rights',cup:'Prêmio da Copa',wages:'Salários'};
 const POSN={G:'GOL',D:'ZAG',M:'MEI',A:'ATA'};
 const TACN={D:'Defensiva',E:'Equilibrada',O:'Ofensiva'}
 const STYLES={N:['Padrão','Sem ajuste extra: o time joga conforme a formação e a postura.'],
@@ -1016,7 +1016,7 @@ function finishMatchday(){applyFmt();
     }
     if(m.derby){res[th.id].derby=true;res[ta.id].derby=true}
     for(const sd of [m.h,m.a]){const t=T(sd.tid);const st=sd.played.slice(0,11);const k=st.filter(id=>(t.lastXI||[]).includes(id)).length;let dl=(k-8)*2;if(t.train==='T')dl*=dl>0?1.5:.5;if(t.captain&&st.includes(t.captain))dl+=1;
-      t.chem=clamp(Math.round((t.chem??70)+dl),30,100);t.lastXI=st;
+      t.chem=clamp(Math.round((t.chem??70)+((t.late||0)>=3?Math.min(0,dl):dl)),30,100);t.lastXI=st;
       const f=sd===m.h?hg:ag,c=sd===m.h?ag:hg;
       {const ck=CK(m.comp);const rr=f>c?'V':f<c?'D':(m.pens?(m.pens[sd===m.h?0:1]>m.pens[sd===m.h?1:0]?'V':'D'):'E');(t.last=t.last||[]).push([rr,ck,!!m.pens]);if(t.last.length>5)t.last.shift()}
       if(isHuman(t.id)){const o=sd===m.h?m.a.tid:m.h.tid;const hr=(t.h2h=t.h2h||{})[o]||(t.h2h[o]=[0,0,0]);hr[f>c?0:f===c?1:2]++}
@@ -1058,6 +1058,12 @@ function finishMatchday(){applyFmt();
   {const pl={};for(const m of L.ms)for(const X of [m.h,m.a])X.played.forEach((id,i)=>pl[id]=i<11?(T(X.tid).style==='H'?14:11):4);
     for(const p of Object.values(S.players)){if(p.team==null)continue;const tt=T(p.team);const bonus=(tt.fac?tt.fac.ct+tt.fac.dm:0)+(tt.train==='F'?5:0);p.fit=clamp((p.fit??100)-(pl[p.id]||0)+7+(pl[p.id]?Math.floor(bonus/2):7+bonus),35,100)}}
   S.teams.forEach(t=>credit(t,'wages',-payroll(t)));
+  S.teams.forEach(t=>{if(t.foreign||t.div>=5)return;if(t.cash>=0){if(t.late>=3&&isHuman(t.id))news('Salários em dia de novo: o elenco volta a se concentrar só no futebol.',[t.id]);t.late=0;return}
+    t.late=(t.late||0)+1;const j=r1k(-t.cash*.02);if(j)credit(t,'juros',-j);const H=isHuman(t.id);
+    if(t.late===2&&H)news('Dois jogos com o caixa no vermelho: na próxima data, os salários atrasam.',[t.id]);
+    if(t.late>=3){t.chem=Math.max(30,(t.chem??70)-3);if(t.late===3)news(`Salários atrasados no ${t.name}; elenco insatisfeito.`,H?[t.id]:undefined)}
+    if(t.late>=5&&t.players.length>15&&Math.random()<.15){const p=squad(t).filter(q=>!q.loan).sort((a,b)=>b.sal-a.sal).slice(0,5);const q=p.length?pick(p):null;
+      if(q){releaseFree(q);if(H)t.lineup=t.lineup.filter(i=>i!==q.id);news(`Com salários atrasados, ${q.name} consegue rescisão na Justiça e deixa o ${t.name} de graça.`,H?[t.id]:undefined)}}});
   if(e.t==='L')S.teams.forEach(t=>{if(!t.foreign&&t.fac){const mt=facMaint(t);if(mt)credit(t,'fac',-mt)}});
   S.teams.forEach(t=>{if(t.works){t.works.left--;if(t.works.left<=0){t.fac[t.works.k]++;if(isHuman(t.id))news(`Obra concluída: ${FACN[t.works.k][0]} no nível ${t.fac[t.works.k]}.`,[t.id]);t.works=null}}
     if(t.stWork){t.stWork.left--;if(t.stWork.left<=0){t.cap=Math.min(80000,t.cap+2000);t.stWork=null;if(isHuman(t.id))news(`Ampliação concluída: o estádio agora tem ${t.cap.toLocaleString('pt-BR')} lugares.`,[t.id])}}});
@@ -1693,7 +1699,7 @@ function pendings(t){const L=[];const add=(lv,txt,act,arg,btn)=>L.push({lv,txt,a
   for(const [k,n] of [['loan','banco'],['floan','financeira']])if(t[k]&&t[k].late)add('hi',`Parcela atrasada com ${n === 'banco'?'o banco':'a financeira'}`,'clv','fin','Ver');
   if(banned(t))add('hi',`Proibido de contratar até o fim da temporada ${t.ban} (punição por dívidas)`,'clv','fin','Ver');
   else if(debtTot(t)>yearRev(t)*.7)add('hi',`Dívida alta (${money(debtTot(t))}): perto de um ano de receita. Pode levar a punição ou à venda do clube a um investidor`,'clv','fin','Finanças');
-  if(t.cash<0)add('hi',`Caixa negativo (${money(t.cash)}): a diretoria cobra a cada data`,'clv','fin','Finanças');
+  if(t.cash<0){const lt=t.late||0;add('hi',lt>=5?`Salários atrasados há ${lt} datas (${money(t.cash)}): entrosamento caindo, jogadores podem rescindir e ninguém renova`:lt>=3?`Salários atrasados (${money(t.cash)}): entrosamento caindo; em ${5-lt} data${5-lt>1?'s':''} jogadores podem pedir rescisão`:`Caixa negativo (${money(t.cash)}): juros de 2% por data e a diretoria cobra.${lt===2?' Na próxima data, os salários atrasam.':' Com 3 datas seguidas, os salários atrasam.'}`,'clv','fin','Finanças')}
   else{const pj=finProj(t);if(pj.end<0)add('mid',`Previsão de fechar a temporada no vermelho (${money(pj.end)})`,'clv','fin','Finanças')}
   const tired=t.lineup.filter(id=>P(id)&&avail(P(id))&&(P(id).fit??100)<70).length;if(tired)add('mid',`${tired} titular${tired>1?'es':''} cansado${tired>1?'s':''} (condição abaixo de 70%)`,'elv','xi','Escalação');
   const ord={hi:0,mid:1,lo:2};return L.sort((a,b)=>ord[a.lv]-ord[b.lv])}
@@ -2121,7 +2127,7 @@ function loanStatus(L,k){const l=L.late||0;if(!l)return '<span style="color:var(
     :l===1?'1 atraso. No próximo, a financeira fica com toda a bilheteria.':'Bilheteria retida pela financeira. No próximo atraso, ela leva seu jogador mais valioso.';
   return `<span style="color:${l>=2?'var(--danger)':'var(--warn)'}">${txt}</span>`}
 const FINCAT=[['tv','Cota de TV',['tv','tvA','tvB','tvC']],['spon','Patrocínio',['spon']],['nr','Naming rights',['nr']],['gate','Bilheteria',['gate']],['prize','Prêmios',['cup','est','cont','mund','prize','art']],['sell','Venda e empréstimo de jogadores',['sell','lfee']],['inv','Investidor da TV',['inv']],['loanIn','Empréstimos recebidos',['loanIn']],
-  ['wages','Salários',['wages']],['buy','Compra de jogadores',['buy']],['luvas','Luvas',['luvas']],['fac','Estrutura e obras',['fac','works']],['debt','Dívidas',['loan','fin','adv']],['multa','Multas de contrato',['multa']]];
+  ['wages','Salários',['wages']],['buy','Compra de jogadores',['buy']],['luvas','Luvas',['luvas']],['fac','Estrutura e obras',['fac','works']],['debt','Dívidas',['loan','fin','adv','juros']],['multa','Multas de contrato',['multa']]];
 function finProj(t){const rest=S.cal.slice(S.md);const n=k=>rest.filter(e=>e.t===k).length;const nL=n('L'),nE=n('E');const pos=Math.max(0,tabOf(t).findIndex(x=>x.id===t.id));const inc=dff().inc;
   const tvR=nL*tvFor(t,pos)*inc+nE*TV[t.div]*.35*inc;const home=Math.round((nL+nE)/2);
   const inn=tvR+sponGuar(t.spon,t)+home*((t.lastRev||attEst(t)*t.price)*inc+(t.nr&&t.nr.perData?t.nr.perData*inc:0));
@@ -2182,10 +2188,14 @@ function renderLoan(t){const K=UI.loanK||'bank';const owe=debtOf(t);
   return fold('loan','Empréstimos',(t.loan&&t.loan.late)||(t.floan&&t.floan.late)?'<b style="color:var(--danger)">Parcela atrasada</b>':owe?`<b style="color:var(--warn)">deve ${money(owe)}</b>`:'<span class="muted">nenhum</span>','',`${act.join('')}${seg}${body}`)}
 function rngIn(kind,arg,min,max,step,val){min=Math.min(min,max);const v=clamp(val,min,max);return `<input type="range" class="rng" data-in="rng" data-kind="${kind}" data-arg="${arg}" min="${min}" max="${max}" step="${step}" value="${v}" aria-label="Ajustar valor">`}
 function rngSet(kind,arg,v){if(kind==='sale'){UI.saleAsk={pid:arg,ask:v,free:false}}else if(kind==='bid'){const b=UI.bid&&UI.bid.pid===arg?UI.bid:{};UI.bid={pid:arg,amt:v,counter:b.counter||null}}
-  else if(kind==='loan'){UI.ls=UI.ls||{};UI.ls[arg]={...(UI.ls[arg]||{}),a:v}}else if(kind==='renS'||kind==='renL'){UI.renP=UI.renP||{};const d=renDemand(P(arg));const cur=UI.renP[arg]||{sal:d.sal,luv:100};UI.renP[arg]=kind==='renS'?{...cur,sal:v}:{...cur,luv:v}}}
-function rngLabel(kind,arg,v){if(kind==='renL'){const p=P(arg);const d=renDemand(p);const y=(UI.renY&&UI.renY[p.id])||defYears(p);return `${money(r1k(d.luvas*y/2*v/100))} (${v}%)`}return money(v)}
-function renChance(p,sal,luvF){const d=renDemand(p);const cs=Math.max(0,1-sal/d.sal),cl=Math.max(0,1-luvF);if(cs<=0&&cl<=0)return 1;return clamp(.95-cs*2.6-cl*.6-(p.idol?.12:0)+(p.age>=31?.1:0),.03,.95)}
-function renChanceTxt(p){const d=renDemand(p);const pr=(UI.renP||{})[p.id]||{sal:d.sal,luv:100};const c=renChance(p,pr.sal,pr.luv/100);return c>=1?'É o que ele pede: renova na hora.':`Chance estimada de ele aceitar: <b>${Math.round(c*100)}%</b>`}
+  else if(kind==='loan'){UI.ls=UI.ls||{};UI.ls[arg]={...(UI.ls[arg]||{}),a:v}}else if(kind==='renS'||kind==='renL'){UI.renP=UI.renP||{};const cur=renPr(P(arg));UI.renP[arg]=kind==='renS'?{...cur,sal:v}:{...cur,luv:v}}}
+function renPr(p){const d=renDemand(p);return (UI.renP||{})[p.id]||{sal:d.sal,luv:renLvAsk(p,renYOf(p))}}
+function rngLabel(kind,arg,v){return money(v)}
+function renChance(p,sal,lv){const d=renDemand(p);const y=renYOf(p);const la=renLvAsk(p,y);if(sal>=d.sal&&lv>=la)return 1;const N=SEAS_D()*y;
+  const ask=d.sal*N+la*1.2,off=sal*N+lv*1.2;const def=1-off/ask;const cs=Math.max(0,1-sal/d.sal);
+  return clamp(.95-Math.max(0,def)*4-cs*.6+(def<0?Math.min(.15,-def*2):0)-(p.idol?.12:0)+(p.age>=31?.1:0),.03,.95)}
+function renChanceTxt(p){const pr=renPr(p);const c=renChance(p,pr.sal,pr.luv);const d=renDemand(p);const y=renYOf(p);const N=SEAS_D()*y;const dif=(pr.sal-d.sal)*N+(pr.luv-renLvAsk(p,y));
+  return c>=1?'É o que ele pede: renova na hora.':`Chance estimada de ele aceitar: <b>${Math.round(c*100)}%</b><br><span class="muted" style="font-size:13px">Custo total no contrato (${y} temp.): ${dif<=0?'economia de ':'gasto extra de '}${money(Math.abs(dif))} em relação ao pedido.</span>`}
 function loanStepper(c,k){return `<span class="label">Valor</span>
     <div class="spread"><b id="rv_loan_${k}" style="font:800 26px var(--display)" class="num">${money(c.a)}</b><button class="btn sm" data-act="loanMax" data-k="${k}">Máximo ${money(c.maxA)}</button></div>
     ${c.maxA>5e4?rngIn('loan',k,5e4,c.maxA,1e4,c.a):''}`}
@@ -2224,24 +2234,30 @@ function renCapF(p){const t=T(p.loan?p.loan.owner:p.team);const top=t&&squad(t).
 function renDemand(p){if(!p.ren||p.ren.season!==S.season||(!p.ren.cv&&!p.ren.ok)){const r=p.rn?p.rs/p.rn:6.2;const k=1.1+(r>=7?.15:r>=6.5?.07:0)+(p.idol?.2:0)+(p.age<=24?.1:0);
   const dl=dff().deal||1;let sal=Math.round(wage(p)*k*dl/100)*100;const capF=renCapF(p);const capped=p.sal>0&&sal>p.sal*capF;if(capped)sal=Math.round(p.sal*capF/100)*100;
   const old=p.ren&&p.ren.season===S.season?p.ren:null;p.ren={season:S.season,sal:Math.max(p.sal,sal),luvas:r1k(value(p)*.08*(p.idol?1.5:1)*dl),tried:old?old.tried:false,cv:1,capped:capped?capF:0}}return p.ren}
-function renewBox(p){const d=renDemand(p);const y=(UI.renY&&UI.renY[p.id])||defYears(p);const lv=r1k(d.luvas*y/2);
+const renYOf=p=>{const d=renDemand(p);return d.ok&&d.okY?d.okY:((UI.renY&&UI.renY[p.id])||defYears(p))};
+function renLvAsk(p,y){const d=renDemand(p);const base=d.luvas*Math.max(y/2,y===1?.7:0);return r1k(Math.min(base,d.sal*6*y/2))}
+function renLv(p,y){const d=renDemand(p);if(d.ok&&d.lvFix!=null)return d.lvFix;return renLvAsk(p,y)}
+const SEAS_D=()=>S.cal?S.cal.length:39;
+function renLvMax(p,y){const d=renDemand(p);return r1k(renLvAsk(p,y)+.3*d.sal*SEAS_D()*y/1.2)}
+function renewBox(p){const d=renDemand(p);const y=renYOf(p);const lv=renLv(p,y);
   return `<div class="panel stack" style="margin-top:12px;border-color:var(--warn)"><span class="label">Renovação de contrato</span>
     ${note(`O contrato termina no fim desta temporada. Salário atual: ${money(p.sal)} por data. Sem renovar, ele sai de graça.`)}
     ${d.capped?note(`Pelo nível, o mercado pagaria mais, mas ninguém triplica o salário de uma vez: o reajuste tem teto de +${Math.round((d.capped-1)*100)}% sobre o atual (${money(p.sal)}).`):''}
     <div>Ele pede <b>${money(d.sal)}</b> por data e <b>${money(lv)}</b> de luvas${d.ok?' <span class="tag" style="background:var(--ok);color:#fff">ACORDO FECHADO</span>':''}.</div>
     <span class="label">Duração</span><div class="seg" role="group">${[1,2,3,4].map(n=>`<button data-act="renY" data-pid="${p.id}" data-n="${n}" aria-pressed="${y===n}">${n} temp.</button>`).join('')}</div>
     <div class="row"><button class="btn primary" data-act="renYes" data-pid="${p.id}">Renovar por ${money(d.sal)}/data</button><button class="btn danger" data-act="renNo" data-pid="${p.id}">Deixar sair</button></div>
-    ${d.ok?'':(()=>{const pr=(UI.renP||{})[p.id]||{sal:d.sal,luv:100};const tried=d.tried===absMd();return `<div class="stack" style="gap:4px;border-top:1px solid var(--line);padding-top:8px"><span class="label">Contraproposta</span>
+    ${(myTeam()&&(T(p.loan?p.loan.owner:p.team).late||0)>=5)?'<span class="warn">Com salários atrasados, nenhum jogador aceita renovar.</span>':''}
+    ${d.ok?'':(()=>{const pr=renPr(p);const tried=d.tried===absMd();return `<div class="stack" style="gap:4px;border-top:1px solid var(--line);padding-top:8px"><span class="label">Contraproposta</span>
       <div class="spread"><span>Salário</span><b id="rv_renS_${p.id}" class="num">${money(pr.sal)}</b></div>${rngIn('renS',p.id,Math.round(d.sal*.7/100)*100,d.sal,100,pr.sal)}
-      <div class="spread"><span>Luvas</span><b id="rv_renL_${p.id}" class="num">${rngLabel('renL',p.id,pr.luv)}</b></div>${rngIn('renL',p.id,0,100,5,pr.luv)}
+      <div class="spread"><span>Luvas</span><b id="rv_renL_${p.id}" class="num">${rngLabel('renL',p.id,pr.luv)}</b></div>${(()=>{const mx=renLvMax(p,y);return rngIn('renL',p.id,0,mx,Math.max(1000,r1k(mx/100)),pr.luv)})()}
       <span id="rc_${p.id}" style="font-size:14px">${renChanceTxt(p)}</span>
       <button class="btn" data-act="renCounter" data-pid="${p.id}" style="align-self:flex-start" ${tried?'disabled':''}>${tried?'Ele responde de novo na próxima data':'Enviar contraproposta'}</button>
-      ${note('Se ele aceitar, o acordo fica fechado e você confirma em Renovar. Se recusar, ele sobe um pouco o pedido; dá para tentar de novo na próxima data.')}</div>`})()}</div>`}
+      ${note('Dá para baixar o salário e compensar com luvas maiores: você paga mais agora e menos ao longo do contrato. Se ele aceitar, o acordo fica fechado e você confirma em Renovar. Se recusar, ele sobe um pouco o pedido; dá para tentar de novo na próxima data.')}</div>`})()}</div>`}
 function contractsPanel(t){
   const ps=[...squad(t).filter(p=>p.cEnd<=S.season&&!p.loan),...Object.values(S.players).filter(p=>p.loan&&p.loan.owner===t.id&&p.cEnd<=S.season)].sort((a,b)=>b.str-a.str);if(!ps.length)return '';
   const open=ps.filter(p=>!p.leaving);let tot=0;
   const rows=ps.map(p=>{if(p.leaving)return `<div class="crow2"><div class="spread"><b>${p.idol?'<span class="idol">★</span> ':''}${esc(p.name)}</b><span class="tag inj">SAI NO FIM</span></div><button class="btn sm" data-act="renReopen" data-pid="${p.id}" style="align-self:flex-start">Reabrir negociação</button></div>`;
-    const d=renDemand(p);const y=(UI.renY&&UI.renY[p.id])||defYears(p);const lv=r1k(d.luvas*y/2);tot+=lv;
+    const d=renDemand(p);const y=renYOf(p);const lv=renLv(p,y);tot+=lv;
     return `<div class="crow2"><div class="spread"><span><span class="pos ${p.pos}" style="display:inline-block;width:40px">${POSN[p.pos]}</span> <b>${p.idol?'<span class="idol">★</span> ':''}${esc(p.name)}</b> <span class="muted" style="font-size:13px">${p.age} anos · força ${p.str}${p.loan?` · emprestado ao ${esc(T(p.team).short)}`:''}</span></span></div>
       <span class="muted" style="font-size:13px">Pede ${money(d.sal)}/data (hoje ${money(p.sal)}) e ${money(lv)} de luvas</span>
       <div class="seg" role="group" aria-label="Duração">${[1,2,3,4].map(n=>`<button data-act="renY" data-pid="${p.id}" data-n="${n}" aria-pressed="${y===n}">${n} temp.</button>`).join('')}</div>
@@ -2376,7 +2392,7 @@ function renderPos(){
   else head=`<div class="panel"><span class="label">${esc(R.label)}</span><p style="margin:6px 0 0">Seu time não jogou nesta data.</p></div>`;
   const ana=m&&m.st?matchAnalysis(R,t):'';
   const rat=R.rat.length?fold('posRat','Notas',`<span class="muted" style="font-size:13px">Melhor: <b style="color:var(--fg)">${nm(R.rat[0][0])} ${String(R.rat[0][1].toFixed(1)).replace('.',',')}</b></span>`,'',`<div>${R.rat.map(([pid,n])=>{const p=P(pid);if(!p)return '';return `<div class="rrow"><span class="pos ${p.pos}">${POSN[p.pos]}</span><b>${esc(p.name)}</b><span class="nota ${n>=7.5?'hi':n<=5.4?'lo':''}">${String(n.toFixed(1)).replace('.',',')}</span></div>`}).join('')}</div>`):'';
-  const keys=['gate','tv','tvA','tvC','tvB','spon','nr','cup','est','cont','mund','wages','fac','loan','fin','adv'].filter(k=>R.led[k]);const tot=keys.reduce((s,k)=>s+R.led[k],0);
+  const keys=['gate','tv','tvA','tvC','tvB','spon','nr','cup','est','cont','mund','wages','fac','loan','fin','adv','juros'].filter(k=>R.led[k]);const tot=keys.reduce((s,k)=>s+R.led[k],0);
   const money1=v=>`<span class="${v<0?'neg-v':'pos-v'}">${v<0?'':'+'}${money(v)}</span>`;
   const fin=fold('posFin','Dinheiro da data',money1(tot),'',`<div class="ledger">${keys.map(k=>`<div><span>${LEDN[k]}</span>${money1(R.led[k])}</div>`).join('')}
     <div class="total"><span>Saldo da data</span>${money1(tot)}</div><div class="total"><span>Caixa</span><span class="${R.cash<0?'neg-v':''}">${money(R.cash)}</span></div></div>`);
@@ -2653,15 +2669,16 @@ const ACT={
     if(p.idol){t.mood=clamp(t.mood-3,0,100);news(`A torcida reclama: o ídolo ${p.name} foi colocado à venda.`,[t.id])}
     news(`${p.name} entrou na lista de transferências${p.sale.ask?' por '+money(p.sale.ask):''}.`,[t.id]);save();render();toast(p.name+' está à venda')},
   saleOff(d){const p=P(d.pid);delete p.sale;save();render();toast(p.name+' saiu da lista')},
-  renY(d){UI.renY={...(UI.renY||{}),[d.pid]:+d.n};render()},
-  renAll(){const t=myTeam();const ps=[...squad(t).filter(p=>p.cEnd<=S.season&&!p.leaving&&!p.loan),...Object.values(S.players).filter(p=>p.loan&&p.loan.owner===t.id&&p.cEnd<=S.season&&!p.leaving)];let tot=0;const plan=ps.map(p=>{const d=renDemand(p);const y=(UI.renY&&UI.renY[p.id])||defYears(p);const lv=r1k(d.luvas*y/2);tot+=lv;return [p,d,y,lv]});
-    if(t.cash<tot){toast('Caixa insuficiente para todas as luvas.');return}plan.forEach(([p,d,y,lv])=>{t.cash-=lv;book(t,'luvas',-lv);p.sal=d.sal;p.cEnd=S.season+y;delete p.ren;p.bought=absMd()});news(`${plan.length} jogadores renovados por ${money(tot)} em luvas.`,[t.id]);save();render();toast(plan.length+' contratos renovados')},
+  renY(d){if(renDemand(P(d.pid)).ok){toast('Acordo fechado: a duração já foi combinada.');return}UI.renY={...(UI.renY||{}),[d.pid]:+d.n};if(UI.renP)delete UI.renP[d.pid];UI.sheet?renderModal():render()},
+  renAll(){const t=myTeam();const ps=[...squad(t).filter(p=>p.cEnd<=S.season&&!p.leaving&&!p.loan),...Object.values(S.players).filter(p=>p.loan&&p.loan.owner===t.id&&p.cEnd<=S.season&&!p.leaving)];let tot=0;const plan=ps.map(p=>{const d=renDemand(p);const y=renYOf(p);const lv=renLv(p,y);tot+=lv;return [p,d,y,lv]});
+    if((t.late||0)>=5){toast('Com salários atrasados, ninguém aceita renovar.');return}if(t.cash<tot){toast('Caixa insuficiente para todas as luvas.');return}plan.forEach(([p,d,y,lv])=>{t.cash-=lv;book(t,'luvas',-lv);p.sal=d.sal;p.cEnd=S.season+y;delete p.ren;p.bought=absMd()});news(`${plan.length} jogadores renovados por ${money(tot)} em luvas.`,[t.id]);save();render();toast(plan.length+' contratos renovados')},
   buyY(d){UI.buyY={...(UI.buyY||{}),[d.pid]:+d.n};renderModal()},
-  renYes(d){const p=P(d.pid);const t=T(p.loan?p.loan.owner:p.team);const dm=renDemand(p);const y=(UI.renY&&UI.renY[p.id])||defYears(p);const lv=r1k(dm.luvas*y/2);
+  renYes(d){const p=P(d.pid);const t=T(p.loan?p.loan.owner:p.team);const dm=renDemand(p);const y=renYOf(p);const lv=renLv(p,y);
+    if((t.late||0)>=5){toast('Com salários atrasados, ninguém aceita renovar.');return}
     if(t.cash<lv){toast('Caixa insuficiente para as luvas.');return}
     t.cash-=lv;book(t,'luvas',-lv);p.sal=dm.sal;p.cEnd=S.season+y;delete p.ren;p.bought=absMd();news(`${p.name} renovou até a temporada ${p.cEnd}: ${money(p.sal)} por data e ${money(lv)} de luvas.`,[t.id]);save();render();toast(p.name+' renovou')},
-  renCounter(d){const p=P(d.pid);const dm=renDemand(p);if(dm.tried===absMd()||dm.ok)return;const pr=(UI.renP||{})[p.id]||{sal:dm.sal,luv:100};const ch=renChance(p,pr.sal,pr.luv/100);dm.tried=absMd();
-    if(Math.random()<ch){dm.sal=pr.sal;dm.luvas=r1k(dm.luvas*pr.luv/100);dm.ok=true;toast(p.name+' aceitou. Confirme em Renovar.')}
+  renCounter(d){const p=P(d.pid);const dm=renDemand(p);if(dm.tried===absMd()||dm.ok)return;const pr=renPr(p);const y=renYOf(p);const ch=renChance(p,pr.sal,pr.luv);dm.tried=absMd();
+    if(Math.random()<ch){dm.sal=pr.sal;dm.lvFix=r1k(pr.luv);dm.okY=y;dm.ok=true;toast(p.name+' aceitou. Confirme em Renovar.')}
     else{dm.sal=Math.round(dm.sal*1.05/100)*100;if(UI.renP)delete UI.renP[p.id];toast(p.name+' recusou e subiu o pedido.')}save();UI.sheet?renderModal():render()},
   renNo(d){const p=P(d.pid);const t=T(p.loan?p.loan.owner:p.team);p.leaving=true;if(p.idol){t.mood=clamp(t.mood-4,0,100);news(`A torcida não gostou: o ídolo ${p.name} não terá o contrato renovado.`,[t.id])}save();render()},
   renReopen(d){P(d.pid).leaving=false;save();render()},
