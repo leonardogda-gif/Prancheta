@@ -754,12 +754,35 @@ function staffPanel(t){const pool=staffPool();t.staff=t.staff||{fis:null,med:nul
       <div class="row"><button class="btn sm" data-act="stOpen" data-k="${k}" aria-expanded="${open}">${open?'Fechar candidatos':c?'Trocar':'Ver candidatos'}</button>${c?`<button class="btn sm danger" data-act="stFire" data-k="${k}">Demitir · multa ${money(c.sal*4)}</button>`:''}</div>
       ${open?pool[k].map((x,i)=>{const sal=stSal(x.lv,t);return `<div class="spread offer"><span style="font-size:14px;min-width:0"><b>${esc(x.name)}</b> ${stars(x.lv)}<br><span class="muted" style="font-size:13px">${money(sal)}/data · ${stEff(k,x.lv)}</span></span><button class="btn sm primary" data-act="stHire" data-k="${k}" data-i="${i}">${c?'Contratar no lugar':'Contratar'}</button></div>`}).join('')+(c?note(`Trocar custa a multa de ${money(c.sal*4)} (4 datas do salário de ${esc(c.name)}).`):''):''}</div>`}).join('')}
     ${note('Os funcionários recebem por data, junto com os salários. Demitir custa 4 datas do salário. Com 4 ou 5 estrelas, outros clubes podem tentar levá-los. A lista de candidatos muda a cada temporada.')}`)}
-function scoutPicks(t){const lv=stLv(t.id,'olh');if(!lv)return [];const key=absMd()+':'+t.id+':'+lv;if(UI.scK===key&&UI.scL)return UI.scL;const wk=weakestXI(t);const avg=teamRating(t);
-  const L=mkPool(t).filter(x=>!x.no&&!x.loan&&x.price<=t.cash*.9&&P(x.pid)&&P(x.pid).age<=31).map(x=>{const p=P(x.pid);const up=p.str-(wk[p.pos]??avg);const pr=potRange(p)[1];const young=p.age<=21&&pr>=avg+5;if(up<=0&&!young)return null;
-    const s=up*3+(young?pr-avg:0)+(p.tr||[]).reduce((a,k)=>a+({pu:2,li:2,de:2,ga:1,fp:1,id:1,fr:-3,me:-1}[k]||0),0)-x.price/Math.max(1,t.cash)*8;return {x,s,up,young,pr}}).filter(Boolean).sort((a,b)=>b.s-a.s).slice(0,[0,1,2,3,3,3][lv]);
-  UI.scK=key;UI.scL=L;return L}
-function scoutPanel(t){const lv=stLv(t.id,'olh');if(!lv)return '';const L=scoutPicks(t);
-  return `<div class="panel stack"><div class="spread"><span class="label">Indicações do olheiro</span>${stars(lv)}</div>${L.length?L.map(({x,up,young,pr})=>{const p=P(x.pid);return `<div class="spread offer"><span style="font-size:14px;min-width:0"><b>${esc(p.name)}</b> <span class="muted" style="font-size:13px">${POSN[p.pos]} · força ${p.str} · ${p.age} anos${x.free?' · sem clube':' · '+esc(T(p.team).short)}</span><br><span style="font-size:13px">${up>0?`Melhora seu time: +${up} sobre o titular mais fraco da posição`:`Jovem com potencial até ${pr}`}${p.tr&&p.tr.length?' · <b class="ptrb">'+trTags(p)+'</b>':''} · ${money(x.price)}</span></span><button class="btn sm" data-act="player" data-pid="${p.id}">Ver</button></div>`}).join(''):note('Nenhum jogador que valha a pena dentro do seu caixa nesta data.')}</div>`}
+function scoutPicks(t){const lv=stLv(t.id,'olh');if(!lv)return {L:[],why:''};const key=absMd()+':'+t.id+':'+lv+':'+t.cash+':'+t.players.length;if(UI.scK===key&&UI.scL)return UI.scL;
+  const sl=assignSlots(t.lineup,fArr(t.formSel));const wk={},wid={};t.lineup.forEach(id=>{const p=P(id);if(!p)return;const s=sl[id]||p.pos;if(wk[s]==null||p.str<wk[s]){wk[s]=p.str;wid[s]=id}});const avg=teamRating(t);
+  const fixed=payroll(t)+staffPay(t);const rev=Math.max(1,revPerData(t));const maxCost=t.cash*.3,reserve=6*fixed;const cap=rev*.7;const N=SEAS_D();
+  const C=[];const add=(p,cost,sal,kind,x)=>{if(!p||p.team===t.id||p.age>31||(isFor(p)&&!forOK(t,p)))return;C.push({p,cost,sal,kind,x})};
+  (S.free||[]).forEach(id=>{const p=P(id);if(!p||p.team!=null)return;const a=freeAsk(p,t);if(a.ok)add(p,a.fee,a.sal,'livre')});
+  const near=p=>{const o=T(p.team);return lv>=3||(!o.foreign&&Math.abs(o.div-t.div)<=1)};
+  S.market.forEach(x=>{const p=P(x.pid);if(p&&p.team!=null&&!isHuman(p.team)&&near(p))add(p,x.price,sigWage(p,t),'à venda')});
+  if(lv>=3){const mk=new Set(S.market.map(x=>x.pid));Object.values(S.players).forEach(p=>{if(p.team==null||isHuman(p.team)||p.loan||mk.has(p.id))return;const o=T(p.team);if(o.foreign&&lv<4)return;if(o.players.length<=15)return;add(p,bidReq(p),sigWage(p,t),'proposta')})}
+  if(lv>=4){const xi={};Object.values(S.players).forEach(p=>{if(p.team==null||isHuman(p.team)||p.loan||p.idol)return;const o=T(p.team);if(o.foreign||o.players.length<=16)return;if(!xi[o.id])xi[o.id]=new Set(bestXI(o,[4,4,2]));if(xi[o.id].has(p.id))return;add(p,r1k(value(p)*.08),p.sal,'empréstimo')})}
+  const over=fixed>cap;let tooCost=0,tooSal=0;
+  const L=C.map(c=>{const p=c.p;const pos=p.pos;const gain=p.str-(wk[pos]??avg);const pr=potRange(p)[1];const young=p.age<=21&&pr>=avg+5&&gain>-8;if(gain<3&&!young)return null;
+    if(c.cost>maxCost||t.cash-c.cost<reserve){tooCost++;return null}
+    const wSal=wid[pos]?P(wid[pos]).sal:0;if(over?c.sal>=wSal:fixed+c.sal>cap){tooSal++;return null}
+    const y=c.kind==='empréstimo'?1:defYears(p);const total=c.cost+c.sal*N*y;const need=Math.max(0,avg-(wk[pos]??avg));
+    const tb=(p.tr||[]).reduce((a,k)=>a+({pu:1,li:1,de:1,ga:1,fp:.5,id:.5,fr:-2,me:-.5}[k]||0),0);
+    const s=(Math.max(gain,young?(pr-avg)/2:0))*(1+need/10)*(1+.06*tb)/Math.sqrt(1+total/Math.max(1,rev*N*.05));
+    return {...c,gain,young,pr,total,y,np:fixed+c.sal,s}}).filter(Boolean).sort((a,b)=>b.s-a.s);
+  const seen=new Set();const out=[];const kc={};for(const c of L){if(seen.has(c.p.id)||(kc[c.kind]||0)>=2)continue;seen.add(c.p.id);kc[c.kind]=(kc[c.kind]||0)+1;out.push(c);if(out.length>=[0,1,2,3,3,3][lv])break}
+  const why=out.length?'':tooCost||tooSal?`Nada que caiba no seu orçamento agora${tooSal&&!tooCost?' (a folha não comporta mais salários)':tooCost&&!tooSal?' (o caixa não comporta mais gastos)':''}.`:'Ninguém no alcance do seu olheiro melhoraria o time agora.';
+  UI.scK=key;UI.scL={L:out,why};return UI.scL}
+function scoutPanel(t){const lv=stLv(t.id,'olh');if(!lv)return '';const {L,why}=scoutPicks(t);const rev=Math.max(1,revPerData(t));const full=t.players.length>=26;
+  const reach=lv>=4?'livres, à venda, propostas, empréstimos e exterior':lv>=3?'livres, à venda e jogadores que não estão à venda':'livres e à venda na sua divisão e na vizinha';
+  return `<div class="panel stack"><div class="spread"><span class="label">Indicações do olheiro</span>${stars(lv)}</div>
+    ${note(`Procura em: ${reach}. Só indica quem cabe no orçamento: gasto até 30% do caixa, caixa restante cobrindo 6 datas de folha e folha até 70% da receita por data.`)}
+    ${L.length?L.map(c=>{const p=c.p;const act=c.kind==='livre'?`<button class="btn sm primary" data-act="signFree" data-pid="${p.id}" ${full?'disabled':''}>Contratar</button>`:c.kind==='empréstimo'?`<button class="btn sm primary" data-act="borrowIn" data-pid="${p.id}" ${full?'disabled':''}>Pegar emprestado</button>`:c.kind==='à venda'?`<button class="btn sm primary" data-act="buy" data-pid="${p.id}" ${full?'disabled':''}>Comprar</button>`:'';
+      return `<div class="offer stack" style="gap:6px"><div style="min-width:0"><b>${esc(p.name)}</b> <span class="muted" style="font-size:13px">${POSN[p.pos]} · força ${p.str} · ${p.age} anos · ${p.team!=null?esc(T(p.team).short):'sem clube'} · <b>${c.kind}</b></span></div>
+        <span style="font-size:13px">${c.gain>=3?`+${c.gain} sobre o titular mais fraco da posição`:`Jovem com potencial até ${c.pr}`}${p.tr&&p.tr.length?' · <b class="ptrb">'+trTags(p)+'</b>':''}</span>
+        <span style="font-size:13px">${c.kind==='livre'?'Luvas':c.kind==='empréstimo'?'Taxa':c.kind==='proposta'?'Proposta de cerca de':'Preço'} <b>${money(c.cost)}</b> + <b>${money(c.sal)}</b>/data · folha vai para ${money(c.np)} (${Math.round(c.np/rev*100)}% da receita)</span>
+        <div class="row"><button class="btn sm" data-act="player" data-pid="${p.id}">Ver ficha</button>${act}</div></div>`}).join(''):note(why)}</div>`}
 const trConv=X=>{let n=0;for(const id of X.on){const q=P(id);if(hasT(q,'ga'))n++;else if(hasT(q,'fo'))n--}return clamp(1+.03*n,.91,1.09)};
 const POSSM={N:1,P:1.3,C:.8,H:1.1,L:.95},CONV={N:1,P:.9,C:1.2,H:1,L:.85};
 function simMinute(m,min){
@@ -2075,7 +2098,8 @@ function mkPool(t){const mk={};S.market.forEach(x=>mk[x.pid]=x.price);
   if(UI.mview==='all')return Object.values(S.players).filter(p=>p.team!=null&&!isHuman(p.team)&&!p.loan).map(p=>mk[p.id]!=null?{pid:p.id,price:mk[p.id]}:{pid:p.id,price:value(p),bid:true});
   return S.market.filter(x=>P(x.pid)&&P(x.pid).team!=null&&!isHuman(P(x.pid).team)).map(x=>({...x}))}
 const MFDEF={min:'',max:'',pot:'',age:'',price:'',sal:'',div:'',nat:'',ctr:'',kind:'all',q:''};
-function renderMercado(){
+function renderMercado(){const h=renderMercado0();if((UI.mview||'mk')!=='olh')return h;const t=myTeam();if(!stLv(t.id,'olh')){UI.mview='mk';return renderMercado0()}const a=h.indexOf('<!--mkA-->'),b=h.indexOf('<!--mkB-->');return a<0||b<0?h:h.slice(0,a)+scoutPanel(t)+h.slice(b)}
+function renderMercado0(){
   const t=myTeam();const view=UI.mview||'mk';const free=view==='free';const mf={...MFDEF,...(UI.mf||{})};const lim=UI.mlimit||20;const wk=weakestXI(t);
   let list=mkPool(t);const q=(mf.q||'').trim().toLowerCase();
   const F=[];const add=(on,fn)=>{if(on){F.push(1);list=list.filter(fn)}};
@@ -2102,7 +2126,7 @@ function renderMercado(){
    <div class="panel spread"><div><span class="label">Caixa</span><div class="cash num" style="font-size:24px">${money(t.cash)}</div></div>
      <div><span class="label">Folha por data</span><div style="font:700 20px var(--display)" class="num">${money(payroll(t))}</div></div>
      <div><span class="label">Elenco</span><div style="font:700 20px var(--display)" class="num">${t.players.length}/26</div></div></div>
-   <div class="seg" role="group" aria-label="Lista" style="display:flex;flex-wrap:wrap">${[['mk','À venda'],['all','Todos'],['free',`Livres (${(S.free||[]).filter(id=>P(id)&&P(id).team==null).length})`],['loan','Empréstimo']].map(([k,l])=>`<button data-act="mview" data-v="${k}" aria-pressed="${view===k}">${l}</button>`).join('')}</div>
+   <div class="seg" role="group" aria-label="Lista" style="display:flex;flex-wrap:wrap">${[['mk','À venda'],['all','Todos'],['free',`Livres (${(S.free||[]).filter(id=>P(id)&&P(id).team==null).length})`],['loan','Empréstimo'],...(stLv(t.id,'olh')?[['olh','Olheiro']]:[])].map(([k,l])=>`<button data-act="mview" data-v="${k}" aria-pressed="${view===k}">${l}</button>`).join('')}</div><!--mkA-->
    <input id="mq" data-in="mq" type="search" placeholder="Buscar jogador ou clube" value="${esc(mf.q||'')}" aria-label="Buscar jogador ou clube" autocomplete="off">
    ${fold('mkf','Filtros',nf?`<b style="color:var(--info)">${nf} ativo${nf>1?'s':''}</b>`:'<span class="muted">nenhum</span>','',`<div class="fgrid">
       ${sel('min','Força mínima',[['','Qualquer'],...[30,40,50,60,70,80].map(v=>[v,v+'+'])])}
@@ -2116,7 +2140,6 @@ function renderMercado(){
       ${free?'':sel('ctr','Contrato',[['','Qualquer'],['end','Terminando nesta temporada']])}
       ${sel('kind','Mostrar',[['all','Todos'],['up','Melhoram meu time'],['deal','Barganhas (à venda)'],['prom','Promessas']])}
     </div><button class="btn sm" data-act="mfClear" style="align-self:flex-start">Limpar filtros</button>`)}
-   ${scoutPanel(t)}
    ${needPanel(t)}
    <div class="seg" role="group">${[['T','Todos'],['G','GOL'],['D','ZAG'],['M','MEI'],['A','ATA']].map(([k,l])=>`<button data-act="mpos" data-p="${k}" aria-pressed="${(UI.mpos||'T')===k}">${l}</button>`).join('')}</div>
    <label class="fsel" style="max-width:260px"><span>Ordenar por</span><select data-in="msort">${[['str','Força'],['pot','Potencial'],['price','Menor preço'],['cb','Custo-benefício'],['age','Mais jovens'],['sal','Menor salário']].map(([k,l])=>`<option value="${k}" ${(UI.msort||'str')===k?'selected':''}>${l}</option>`).join('')}</select></label>
@@ -2128,7 +2151,7 @@ function renderMercado(){
       <div class="buy">${x.loan?`<span class="price num">${money(x.price)}</span><small>taxa · você paga o salário</small><button class="btn sm ${t.cash>=x.price&&!full?'primary':''}" data-act="borrowIn" data-pid="${p.id}" ${t.cash>=x.price&&!full?'':'disabled'}>Pegar emprestado</button>`:x.bid?`<span class="price num">${money(x.price)}</span><small>valor de mercado</small><button class="btn sm" data-act="player" data-pid="${p.id}" ${full?'disabled':''}>Proposta</button>`
         :`${x.no?'<span class="price" style="font-size:13px;color:var(--danger)">Recusa</span><small>nível acima</small>':`<span class="price num">${money(x.price)}</span><small>${x.free?'luvas':dealTag(x,p)}</small>`}<button class="btn sm ${can?'primary':''}" data-act="${x.free?'signFree':'buy'}" data-pid="${p.id}" ${can?'':'disabled'}>${x.free?'Contratar':'Comprar'}</button>`}</div></div>`}).join('')||`<p class="muted">${free?'Nenhum jogador livre com esses filtros. Jogadores ficam livres quando o contrato acaba sem renovação.':'Nenhum jogador com esses filtros.'}</p>`}</div>
    ${list.length>lim?`<button class="btn" data-act="mmore">Ver mais (${list.length-lim} restantes)</button>`:''}
-   ${helpFold('helpMk','À venda: jogadores que os clubes anunciaram, com preço fixo (barganha é até +12% sobre o valor, justo até +25%, caro acima disso). Todos: qualquer jogador de outro clube; quem não está à venda pede proposta, e o clube pode aceitar, recusar ou contrapropor. Livres: sem clube, você paga só as luvas, mas só pode vendê-los a partir da temporada seguinte. Quem foi comprado ou renovou fica 10 datas sem poder ser negociado. Clubes do exterior cobram mais. Limite de 9 estrangeiros e de 26 jogadores no elenco. Para vender os seus, abra o jogador no Elenco.')}
+<!--mkB-->   ${helpFold('helpMk','À venda: jogadores que os clubes anunciaram, com preço fixo (barganha é até +12% sobre o valor, justo até +25%, caro acima disso). Todos: qualquer jogador de outro clube; quem não está à venda pede proposta, e o clube pode aceitar, recusar ou contrapropor. Livres: sem clube, você paga só as luvas, mas só pode vendê-los a partir da temporada seguinte. Quem foi comprado ou renovou fica 10 datas sem poder ser negociado. Clubes do exterior cobram mais. Limite de 9 estrangeiros e de 26 jogadores no elenco. Para vender os seus, abra o jogador no Elenco.')}
   </section>`}
 
 /* ---------- clube ---------- */
