@@ -1721,13 +1721,16 @@ function aiTrim(){let n=0;
     const p=squad(t).filter(q=>!q.loan&&!q.idol).sort((a,b)=>b.sal-a.sal)[0];if(!p)continue;const price=r1k(value(p));
     const buyer=S.teams.filter(b=>!isHuman(b.id)&&!b.foreign&&forOK(b,p)&&b.div<t.div&&b.cash>=price*1.2&&b.players.length<24).sort((a,b)=>b.cash-a.cash)[0]||pick(S.teams.filter(b=>b.foreign&&b.players.length<26));if(!buyer)continue;
     transfer(p.id,buyer.id,price);p.sal=wage(p);p.cEnd=S.season+ri(2,4);n++;news(`${t.name} vende ${p.name} ao ${buyer.name} por ${money(price)} para aliviar a folha.`)}}
+function aiSurplus(t){const reserve=Math.max(CASH[t.div]*.6,payroll(t)*12);return t.cash-reserve}
 function aiReinforce(){aiTrim();const out=[];let n=0;
-  for(const t of shuffle(S.teams.filter(x=>!isHuman(x.id)&&!x.foreign))){if(n>=3)break;
-    if(Math.random()>.06*dff().ai)continue;if(inDebt(t)||banned(t)||t.players.length>=24||t.cash<payroll(t)*20)continue;
+  for(const t of shuffle(S.teams.filter(x=>!isHuman(x.id)&&!x.foreign))){if(n>=8)break;
+    if(inDebt(t)||banned(t)||t.players.length>=24)continue;if(t.reinfS!==S.season){t.reinfS=S.season;t.reinfN=0}const sur=aiSurplus(t);if(t.reinfN>=(sur>payroll(t)*30?6:3))continue;
+    const ch=sur>0?Math.min(.6,.1+sur/Math.max(1,payroll(t)*25)):.06*dff().ai*(t.cash>=payroll(t)*20?1:0);if(Math.random()>ch*(sur>0?dff().ai:1))continue;
     const xi=bestXI(t,[4,4,2]).map(P);const pc=posCount(t);const weak=xi.filter(p=>p.pos!=='G'&&pc[p.pos]<PMAX[p.pos]).sort((a,b)=>a.str-b.str)[0];if(!weak)continue;
-    const c=Object.values(S.players).filter(p=>p.pos===weak.pos&&p.team!=null&&p.team!==t.id&&!p.loan&&!isHuman(p.team)&&!T(p.team).foreign&&forOK(t,p)&&T(p.team).div>=t.div&&T(p.team).players.length>15&&p.str>=weak.str+4&&p.age<=30).sort((a,b)=>b.str-a.str).slice(0,6);
-    if(!c.length)continue;const p=pick(c);const price=r1k(value(p)*rnd(1.1,1.3));if(price>t.cash*.5)continue;
-    const from=T(p.team);transfer(p.id,t.id,price);p.sal=wage(p);p.cEnd=S.season+ri(2,4);n++;out.push(`${t.name} se reforça com ${p.name}, que deixa o ${from.name} por ${money(price)}.`)}
+    const budget=Math.min(t.cash*.4,Math.max(sur,t.cash*.25));
+    const c=Object.values(S.players).filter(p=>p.pos===weak.pos&&p.team!=null&&p.team!==t.id&&!p.loan&&!isHuman(p.team)&&!T(p.team).world&&(T(p.team).foreign||T(p.team).div>=t.div)&&forOK(t,p)&&T(p.team).players.length>15&&p.str>=weak.str+4&&p.age<=30&&aiWageOK(t,p)).sort((a,b)=>b.str-a.str).slice(0,8);
+    const aff=c.filter(p=>r1k(value(p)*1.2)<=budget);if(!aff.length)continue;const p=pick(aff.slice(0,4));const price=r1k(value(p)*rnd(1.1,1.3));if(price>budget)continue;
+    const from=T(p.team);transfer(p.id,t.id,price);p.sal=wage(p);p.cEnd=S.season+ri(2,4);n++;t.reinfN++;out.push(`${t.name} se reforça com ${p.name}, que deixa o ${from.name} por ${money(price)}.`)}
   out.forEach(s=>news(s));return out}
 const PMAX={G:3,D:7,M:7,A:6},PMIN={G:2,D:4,M:4,A:3};
 const posCount=t=>{const c={G:0,D:0,M:0,A:0};squad(t).forEach(p=>c[p.pos]++);return c};
