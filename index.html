@@ -584,6 +584,7 @@ function assignStates(){for(const d of [0,1,2,3,5]){const ts=shuffle(S.teams.fil
 const fitF=p=>.7+.3*(p.fit??100)/100;
 const fac=(tid,k)=>tid!=null&&T(tid)&&T(tid).fac?T(tid).fac[k]||0:0;
 function ensureExtras(){
+  if(!S.priceV2){S.teams.forEach(t=>{if(!isHuman(t.id))t.price=refPrice(t)});S.priceV2=true}
   if(!S.realFV1){if(S.teams.some(t=>t.foreign))realForeignNames();S.realFV1=true}
   S.teams.forEach(t=>{if(!t.fac)t.fac=t.foreign?{ct:3,dm:3,base:3}:{ct:[3,2,1,0,3,0][t.div],dm:[3,2,1,0,3,0][t.div],base:[2,1,1,0,3,0][t.div]};
     if(t.chem==null)t.chem=70;if(!t.train)t.train='N';if(!t.troph)t.troph=[];if(!t.rec)t.rec={g:{},a:{},n:{},win:null}});
@@ -750,7 +751,9 @@ function sideStr(sd){
   const sec={mid:m,dsum:d,asum:a};
   {const t=T(sd.tid);const ch=.86+.16*(t.chem??70)/100;att*=ch;def*=ch;if(t.train==='A')att*=1.04;if(t.train==='D')def*=1.04;if(t.captain&&sd.on.includes(t.captain)){const cb=hasT(P(t.captain),'li')?1.04:1.02;att*=cb;def*=cb}}
   return {att,def,...sec}}
-function attendance(t,tk){const pm=tk?tk.pm:1,dm=tk?tk.dm:1;return Math.min(capOf(t),Math.round(t.fans*dm*Math.pow(PRICE[t.div]/(t.price*pm),1.25)*(.7+.6*(t.mood??60)/100)*rnd(.85,1.05)))}
+const refPrice=t=>Math.max(1,Math.round(PRICE[t.div]*([1,.8,.9,1,1.2,1.4][t.foreign?3:grOf(t)]||1)));
+function bestPrice(t){const ref=refPrice(t);let best=null;const a0=attEst(t),cur=a0*t.price;for(let p=Math.max(1,Math.round(ref*.5));p<=Math.floor(ref*1.3);p++){const a=attEst(t,p);const r=a*p;if(!best||r>best.rev)best={p,rev:r,att:a}}if(!best)return null;return {...best,cur,att0:a0,full:a0>=capOf(t)*.97}}
+function attendance(t,tk){const pm=tk?tk.pm:1,dm=tk?tk.dm:1;return Math.min(capOf(t),Math.round(t.fans*dm*Math.pow(refPrice(t)/(t.price*pm),1.25)*(.7+.6*(t.mood??60)/100)*rnd(.85,1.05)))}
 function ticketFor(h,a,comp,e){const ht=T(h),at=T(a);e=e||currentEntry();const opts=[];
   const fin=/F$/.test(comp)||comp==='M1'||(comp==='C'&&e&&CUPN[e.s]==='Final');const semi=!fin&&(/S$/.test(comp)||comp==='M0'||(comp==='C'&&e&&CUPN[e.s]==='Semifinal'));
   const ko=KO.has(comp)&&!(comp==='C'&&e&&!e.s);const derby=!ht.foreign&&!at.foreign&&isDerby(h,a);
@@ -1141,7 +1144,7 @@ function finishMatchday(){applyFmt();
       const A=S.tab[th.id],B=S.tab[ta.id];A.j++;B.j++;A.gp+=hg;A.gc+=ag;B.gp+=ag;B.gc+=hg;
       if(hg>ag){A.v++;A.pts+=3;B.d++}else if(hg<ag){B.v++;B.pts+=3;A.d++}else{A.e++;B.e++;A.pts++;B.pts++}
       gate(th,1,m.att,m.pm||1);
-      {const ref=PRICE[th.div];if(th.price>ref)th.mood-=Math.min(6,(th.price/ref-1)*8);else if(th.price<=ref*.8)th.mood+=1}
+      {const ref=refPrice(th);if(th.price>ref)th.mood-=Math.min(6,(th.price/ref-1)*8);else if(th.price<=ref*.8)th.mood+=1}
       [[th,hg,ag],[ta,ag,hg]].forEach(([t,f,c])=>{const r=f>c?'V':f<c?'D':'E';t.mood+=(r==='V'?6:r==='E'?-1:-7)*(m.derby?1.8:1);t.hist.push(r);if(t.hist.length>5)t.hist.shift();
         t.fans=Math.round(t.fans*(r==='V'?1.012:r==='D'?.992:1));res[t.id]={r,comp:'L',f,c}});
     }else if(m.comp==='E'||m.comp==='K'){
@@ -1453,6 +1456,7 @@ function endSeason(){
     if(t.bloc==='B'&&!t.tvInv&&t.cash<CASH[t.div]*.3&&Math.random()<.5){t.tvInv=true;credit(t,'inv',invVal(t));news(`${t.name} vende 20% da cota de TV a um investidor e recebe ${money(invVal(t))}.`)}});
   S.managers.forEach(m=>{m.repS=0});
   {const pool=coachPool();while(pool.length<10){const c=makeCoach({div:ri(1,3)});c.last=null;pool.push(c)}}
+  S.teams.forEach(t=>{if(!isHuman(t.id))t.price=refPrice(t)});
   S.summary=sum;S.season++;drawForeign(false);newSeasonStructures();refreshMarket();setGoals();S.teams.forEach(t=>t.chem=Math.max(60,t.chem??70));
   S.managers.forEach(mg=>{if(!mg.out&&!mg.fired)mg.offers.forEach(o=>news(`Proposta: o ${T(o.tid).name} quer contratar ${mg.name} para a nova temporada.`,[mg.team]))});
   const fi=S.managers.findIndex(m=>m.fired&&!m.out);if(fi>=0)UI.cur=fi;
@@ -1701,7 +1705,7 @@ const FTERMS=[{n:7,r:.30,l:'7 rodadas'},{n:14,r:.45,l:'14 rodadas'}];
 const debtOf=t=>(t.loan?t.loan.owe+(t.loan.pen||0):0)+(t.floan?t.floan.owe+(t.floan.pen||0):0)+(t.tvAdv?t.tvAdv.owed:0);
 function nextTV(t){const pos=Math.max(0,tabOf(t).findIndex(x=>x.id===t.id));return (tvFor(t,pos)*NL()+TVB[t.div]*.3*audF(t)*9)*dff().inc}
 const TERMS=[{n:14,r:.05,l:'1 temporada'},{n:28,r:.09,l:'2 temporadas'},{n:42,r:.13,l:'3 temporadas'}];
-function attEst(t,price=t.price){return Math.min(capOf(t),Math.round(t.fans*Math.pow(PRICE[t.div]/price,1.25)*(.7+.6*(t.mood??60)/100)*.95))}
+function attEst(t,price=t.price){return Math.min(capOf(t),Math.round(t.fans*Math.pow(refPrice(t)/price,1.25)*(.7+.6*(t.mood??60)/100)*.95))}
 function revPerData(t){const pos=tabOf(t).findIndex(x=>x.id===t.id);return tvFor(t,pos)+sponPerL(t.spon)+(t.nr?t.nr.perData:0)+attEst(t)*t.price/2}
 function loanCalc(t,k){k=k||'bank';const s=(UI.ls||{})[k]||{};
   if(k==='adv'){const maxA=Math.max(0,Math.floor(nextTV(t)*.6/5e4)*5e4);const a=s.a==null?maxA:clamp(s.a,Math.min(5e4,maxA),maxA);return {maxA,a,owed:r1k(a*1.15)}}
@@ -1763,7 +1767,7 @@ function spontOffer(t){
   const buyers=S.teams.filter(b=>!isHuman(b.id)&&!b.foreign&&forOK(b,p)&&b.cash>=amount*1.1&&b.div<=t.div+1&&b.players.length<24);if(!buyers.length)return null;
   const b=wpick(buyers,b=>5-b.div);const o={pid:p.id,tid:b.id,amount,exp:S.md+3,raised:false};t.pOffers.push(o);return o}
 function crowdTalk(t,Rp,X){
-  const v=[];const ref=PRICE[t.div];
+  const v=[];const ref=refPrice(t);
   t.recent=(t.recent||[]).filter(r=>r.until>=S.md);
   t.reqs=(t.reqs||[]).filter(r=>r.exp>=S.md).filter(r=>{let ok=false;
     if(r.type==='drop')ok=!P(r.pid)||P(r.pid).team!==t.id||(X&&!X.played.includes(r.pid));
@@ -1812,7 +1816,7 @@ function pressQ(t,Rp){const m=Rp.match;const my=m.h===t.id?m.hg-m.ag:m.ag-m.hg;c
   const star=(t.pOffers||[]).map(o=>P(o.pid)).filter(Boolean).sort((a,b)=>b.str-a.str)[0];
   if(star)qs.push({q:`Há interesse no ${star.name}. Ele vai ser vendido?`,o:[['Ele não sai daqui.',{mood:4},star.id],['Toda proposta é avaliada.',{mood:-2,conf:1}]]});
   if(Rp.derby)qs.push({q:'O que o clássico representa para o clube?',o:[['É mais que três pontos.',{mood:3}],['É um jogo como outro qualquer.',{mood:-3,chem:2}]]});
-  if(t.price>PRICE[t.div]*1.3)qs.push({q:'A torcida reclama do preço do ingresso. Vai baixar?',o:[['Vamos rever o preço.',{mood:2,conf:-1}],['O clube precisa dessa receita.',{mood:-2,conf:1}]]});
+  if(t.price>refPrice(t)*1.3)qs.push({q:'A torcida reclama do preço do ingresso. Vai baixar?',o:[['Vamos rever o preço.',{mood:2,conf:-1}],['O clube precisa dessa receita.',{mood:-2,conf:1}]]});
   if(my<0)qs.push({q:'Depois da derrota, o time vai reagir?',o:[['Assumo a responsabilidade.',{conf:2,chem:3}],['Os jogadores precisam render mais.',{chem:-6,conf:1}],['Foi um tropeço, seguimos o plano.',{mood:-2}]]});
   if(my>0)qs.push({q:'Dá para sonhar alto nesta temporada?',o:[['Pé no chão, jogo a jogo.',{conf:1,chem:1}],['Vamos brigar por tudo!',{mood:5,conf:-1}],['Ainda temos muito a melhorar.',{chem:2}]]});
   if(my===0)qs.push({q:'O empate foi um bom resultado?',o:[['Merecíamos mais.',{mood:2,chem:1}],['O adversário também jogou bem.',{conf:-1,chem:2}]]});
@@ -1926,7 +1930,7 @@ function coachMoves(e,rep){if(e.t!=='L')return;let n=0;
     if(pos-ex>=3&&tb.j>=7){ch+=.12;why=why||'pela campanha abaixo do esperado'}
     if(ch&&Math.random()<ch*[1.4,1.2,1,.85][t.div]){fireCoach(t,why,rep);n++}}}
 function aiInvest(){for(const t of S.teams){if(t.foreign||isHuman(t.id)||t.div>=4||inDebt(t))continue;
-  if(!t.stWork&&t.cap<80000&&attEst(t,PRICE[t.div])>=t.cap*.97&&t.cash-seatCost(t)>=CASH[t.div]*.6&&Math.random()<.3){t.cash-=seatCost(t);t.stWork={left:8};news(`${t.name} começa a ampliar o estádio.`);continue}
+  if(!t.stWork&&t.cap<80000&&attEst(t,refPrice(t))>=t.cap*.97&&t.cash-seatCost(t)>=CASH[t.div]*.6&&Math.random()<.3){t.cash-=seatCost(t);t.stWork={left:8};news(`${t.name} começa a ampliar o estádio.`);continue}
   if(t.works||!t.fac)continue;const cap=[5,4,3,2][t.div];
   const ks=['ct','dm','base'].filter(k=>t.fac[k]<cap).sort((a,b)=>t.fac[a]-t.fac[b]);if(!ks.length)continue;const k=ks[0];const c=facCost(t,t.fac[k]);
   if(t.cash-c<CASH[t.div]*.6||Math.random()>.35)continue;t.cash-=c;t.works={k,left:4+2*t.fac[k]};news(`${t.name} inicia obra: ${FACN[k][0].toLowerCase()} rumo ao nível ${t.fac[k]+1}.`)}}
@@ -2262,7 +2266,9 @@ function renderClube(){
          ${note('O público potencial anda aos poucos em direção ao natural da divisão. Vitórias, torcida animada e ingresso barato enchem mais o estádio.')}`})()}
      <div class="spread"><div><span class="label">Ingresso</span><div style="font:800 24px var(--display)" class="num">R$ ${t.price}</div></div>
        <div class="row" style="gap:6px"><button class="btn sm" data-act="price" data-d="-5" aria-label="Baixar R$ 5">−5</button><button class="btn sm" data-act="price" data-d="-1" aria-label="Baixar R$ 1">−1</button><button class="btn sm" data-act="price" data-d="1" aria-label="Subir R$ 1">+1</button><button class="btn sm" data-act="price" data-d="5" aria-label="Subir R$ 5">+5</button></div></div>
-     ${(()=>{const a=attEst(t);return note(`Estimativa por jogo em casa: ${a.toLocaleString('pt-BR')} torcedores (${Math.round(a/t.cap*100)}% do estádio), bilheteria de ${money(a*t.price)}. Referência na ${DIVN[t.div]}: R$ ${PRICE[t.div]}; acima de R$ ${Math.round(PRICE[t.div]*1.3)} a torcida reclama.`)})()}
+     ${(()=>{const a=attEst(t);return note(`Estimativa por jogo em casa: ${a.toLocaleString('pt-BR')} torcedores (${Math.round(a/t.cap*100)}% do estádio), bilheteria de ${money(a*t.price)}. Referência para um clube de torcida ${GRN[grOf(t)].toLowerCase()} na ${DIVN[t.div]}: R$ ${refPrice(t)}; acima de R$ ${Math.round(refPrice(t)*1.3)} a torcida reclama.`)})()}
+     ${(()=>{const b=bestPrice(t);if(!b||Math.abs(b.p-t.price)<2||b.rev<b.cur*1.03)return note('O preço atual já está perto do que rende mais bilheteria sem a torcida reclamar.');
+       return `<div class="panel stack" style="border-color:var(--ok);gap:6px"><span style="font-size:14px"><b>Preço sugerido: R$ ${b.p}</b>. ${b.full?'Seu estádio está lotando. ':''}A renda por jogo vai de ${money(b.cur)} para <b>${money(b.rev)}</b>; o público ${b.att<b.att0?`cai ${Math.round((1-b.att/b.att0)*100)}%`:`sobe ${Math.round((b.att/b.att0-1)*100)}%`}.</span><button class="btn sm primary" data-act="priceSet" data-v="${b.p}" style="align-self:flex-start">Usar R$ ${b.p}</button>${note('Calculado com a fórmula de público do jogo, sem passar do limite em que a torcida reclama. Jogos grandes ainda sobem o preço automaticamente.')}</div>`})()}
      <span class="label">Preço por jogo</span><div class="seg" role="group"><button data-act="autoP" data-v="1" aria-pressed="${t.autoP!==false}">Automático</button><button data-act="autoP" data-v="0" aria-pressed="${t.autoP===false}">Sempre o mesmo</button></div>
      ${note(t.autoP===false?'O ingresso fica sempre no preço acima. Jogos grandes continuam atraindo mais gente.':'O preço acima é a base. Em jogos grandes ele sobe sozinho, e a procura também: final +80%, semifinal +40%, clássico +30%, outros mata-matas +20%, visitante de torcida grande ou briga por título/acesso nas últimas rodadas +15% (vale só o maior). Jogo sem nada em disputa ou time em má fase: −15%. A torcida só reclama do preço base.')}`)}
    ${(UI.cv||'fin')!=='ger'?'':staffPanel(t)}
@@ -3045,6 +3051,7 @@ const ACT={
   tmodeGo(d){UI.tab='tabela';UI.tmode=d.v;if(myTeam())UI.tdiv=myTeam().div;render();window.scrollTo(0,0)},
   tmode(d){UI.tmode=d.m;if(d.m==='liga'&&myTeam())UI.tdiv=myTeam().div;render()},
   price(d){const t=myTeam();t.price=clamp(t.price+ +d.d,1,300);save();render()},
+  priceSet(d){const t=myTeam();t.price=clamp(+d.v,1,300);save();render();toast('Ingresso: R$ '+t.price)},
   expand(){const t=myTeam();const c=seatCost(t);if(t.cash<c||t.stWork||t.cap>=80000)return;t.cash-=c;book(t,'works',-c);t.stWork={left:8};news(`Obra de ampliação iniciada: +${Math.min(5000,80000-t.cap).toLocaleString('pt-BR')} lugares em 8 datas.`,[t.id]);save();render();toast('Obra iniciada')},
   offerYes(d){const mg=me();const o=mg.offers[+d.i];if(!o||isHuman(o.tid)){toast('Proposta indisponível.');return}takeJob(mg,o.tid);UI.tab='jogo';render()},
   offerNo(d){const mg=me();const o=mg.offers[+d.i];mg.offers.splice(+d.i,1);if(o&&T(o.tid).div<=T(mg.team).div){mg.conf=clamp(mg.conf+3,0,100);news(`${mg.name} recusa proposta do ${T(o.tid).name} e ganha pontos com a diretoria.`,[mg.team])}else if(o)news(`${mg.name} recusa a proposta do ${T(o.tid).name} e fica no ${T(mg.team).name}.`,[mg.team]);save();render()},
