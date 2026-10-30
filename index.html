@@ -734,13 +734,39 @@ function topUp(t){while(t.players.length<16){const need=['G','D','D','M','M','A'
   t.players.push(youth(t,pos).id)}}
 
 /* ============ motor de jogo ============ */
+function aiBestFormation(t){
+  const coach=t.coach,forms=FORMS.map(f=>f.slice());
+  if(coach&&Array.isArray(coach.form)&&coach.form.length===3&&!forms.some(f=>f.join('-')===coach.form.join('-')))forms.push(coach.form.slice());
+  let best=null;
+  for(const form of forms){
+    const on=bestXI(t,form),slots=assignSlots(on,form);let score=0,used=0;
+    for(const id of on){const p=P(id);if(!p)continue;const slot=slots[id]||p.pos;score+=p.str*PEN[p.pos][slot]*fitF(p);used++}
+    score=used?score/used:0;if(coach&&coach.form&&form.join('-')===coach.form.join('-'))score+=.55;
+    if(!best||score>best.score)best={form,on,score};
+  }
+  return best||{form:[4,4,2],on:bestXI(t,[4,4,2]),score:0};
+}
+function aiTacticalPlan(t,opp){
+  const rival=T(opp),gap=teamRating(t)-teamRating(rival),chosen=aiBestFormation(t);t.form=chosen.form.slice();
+  const pref=t.coach?t.coach.tac:'E';
+  t.tactic=gap>=9?'O':gap<=-9?'D':(gap>=3?(pref==='D'?'E':pref):gap<=-3?(pref==='O'?'E':pref):pref);
+  const xi=chosen.on.map(P).filter(Boolean),avg=k=>{const a=xi.filter(p=>p.pos===k);return a.length?a.reduce((s,p)=>s+p.str*fitF(p),0)/a.length:0};
+  const mid=avg('M'),def=avg('D'),att=avg('A'),fitness=xi.length?xi.reduce((s,p)=>s+(p.fit??100),0)/xi.length:100;
+  const rivalStyle=rival.style||'N',rivalTac=rival.tactic||'E';let sty='N';
+  if((rivalTac==='O'||rivalStyle==='P'||rivalStyle==='H')&&att>=teamRating(rival)-5)sty='C';
+  else if(mid>=teamRating(rival)-1&&fitness>=82)sty='P';
+  else if(def>=mid+2&&rivalTac!=='D')sty='L';
+  else if(fitness>=91&&mid>=teamRating(rival)-3)sty='H';
+  if(t.coach&&Math.random()<.28&&Math.abs(gap)<7)sty=t.coach.sty;
+  t.style=sty;return chosen;
+}
 function prepSide(tid,opp){
-  const t=T(tid);let on;
-  let form;if(isHuman(tid)){on=t.lineup.slice();form=fArr(t.formSel)}else{const c=t.coach;
-    if(c){t.tactic=c.tac;t.style=Math.random()<.75?c.sty:wpick(STYK,k=>({N:4,P:1.5,C:1.5,H:1.5,L:1.5})[k]);t.form=c.form;if(opp!=null&&teamRating(T(opp))-teamRating(t)>=8&&Math.random()<.5){t.tactic='D';if(Math.random()<.5)t.style='C'}}
-    else{t.tactic=pick(['D','E','E','E','O']);t.style=wpick(STYK,k=>({N:4,P:1.5,C:1.5,H:1.5,L:1.5})[k]);t.form=pick(FORMS)}form=t.form;on=bestXI(t,form)}
-  const bench=squad(t).filter(p=>avail(p)&&!on.includes(p.id)).sort((a,b)=>b.str-a.str).map(p=>p.id);
-  return {tid,on,bench,subs:3,goals:0,yel:{},played:on.slice(),rat:{},slot:assignSlots(on,form),human:isHuman(tid)}}
+  const t=T(tid);let on,form;
+  if(isHuman(tid)){on=t.lineup.slice();form=fArr(t.formSel)}
+  else{const plan=aiTacticalPlan(t,opp);form=plan.form;on=plan.on}
+  const bench=squad(t).filter(p=>avail(p)&&!on.includes(p.id)).sort((a,b)=>b.str*fitF(b)-a.str*fitF(a)).map(p=>p.id);
+  return {tid,on,bench,subs:3,goals:0,yel:{},played:on.slice(),rat:{},slot:assignSlots(on,form),human:isHuman(tid)}
+}
 function sideStr(sd){
   let g=0,d=0,m=0,a=0;
   for(const id of sd.on){const p=P(id);const s=sd.slot[id]||p.pos;const v=p.str*PEN[p.pos][s]*fitF(p)*(sd.big&&hasT(p,'de')?1.05:1);if(s==='G')g=Math.max(g,v);else if(s==='D')d+=v;else if(s==='M')m+=v;else a+=v}
@@ -834,8 +860,13 @@ function simMinute(m,min){
   const y0=styleOf(m.h),y1=styleOf(m.a);let mh=Math.max(1,S0.mid)*POSSM[y0],ma=Math.max(1,S1.mid)*POSSM[y1];
   if(y0==='H'&&y1==='P')ma*=.82;if(y1==='H'&&y0==='P')mh*=.82;
   const ph=Math.pow(mh,1.5)/(Math.pow(mh,1.5)+Math.pow(ma,1.5));st.h.ps+=ph;st.a.ps+=1-ph;st.h.n++;st.a.n++;
-  if(min===65||min===75||min===82)for(const [X,Y,k] of [[m.h,m.a,'h'],[m.a,m.h,'a']]){if(X.human)continue;const tt=T(X.tid);const d=X.goals-Y.goals;const want=d<0?'O':(d>0&&min>=75)?'D':null;
-    if(want&&tt.tactic!==want){tt.tactic=want;m.ev.push({min,side:k,type:'tac',v:want})}}
+  if(min===60||min===72||min===82)for(const [X,Y,k] of [[m.h,m.a,'h'],[m.a,m.h,'a']]){
+    if(X.human)continue;const tt=T(X.tid),d=X.goals-Y.goals,was=tt.tactic,oldStyle=tt.style;
+    if(d<0){tt.tactic=min>=72?'O':'E';if(tt.style==='C'&&Y.tactic==='D')tt.style='P';else if(tt.style==='N')tt.style='L'}
+    else if(d>0&&min>=72){tt.tactic='D';if(tt.style==='P')tt.style='C'}
+    else if(d===0&&min>=82){const gap=teamRating(tt)-teamRating(T(Y.tid));tt.tactic=gap>=7?'O':gap<=-7?'D':'E'}
+    if(was!==tt.tactic)m.ev.push({min,side:k,type:'tac',v:tt.tactic});
+  }
   for(const [X,Y,home] of [[m.h,m.a,true],[m.a,m.h,false]]){
     const sx=home?S0:S1,sy=home?S1:S0,yx=home?y0:y1,yy=home?y1:y0,px=home?ph:1-ph,sd=home?st.h:st.a;
     let att=sx.att,def=sy.def;
