@@ -871,7 +871,7 @@ function simMinute(m,min){
     if(d<0){tt.tactic=min>=72?'O':'E';if(tt.style==='C'&&Y.tactic==='D')tt.style='P';else if(tt.style==='N')tt.style='L'}
     else if(d>0&&min>=72){tt.tactic='D';if(tt.style==='P')tt.style='C'}
     else if(d===0&&min>=82){const gap=teamRating(tt)-teamRating(T(Y.tid));tt.tactic=gap>=7?'O':gap<=-7?'D':'E'}
-    if(was!==tt.tactic)m.ev.push({min,side:k,type:'tac',v:tt.tactic});
+    if(was!==tt.tactic)m.ev.push({min,side:k,type:'tac',v:tt.tactic,gf:X.goals,ga:Y.goals});
   }
   for(const [X,Y,home] of [[m.h,m.a,true],[m.a,m.h,false]]){
     const sx=home?S0:S1,sy=home?S1:S0,yx=home?y0:y1,yy=home?y1:y0,px=home?ph:1-ph,sd=home?st.h:st.a;
@@ -1241,7 +1241,7 @@ function finishMatchday(){applyFmt();
         if(g>0)g=Math.min(g,1.5,Math.max(0,12-(mg.repS||0)));
         if(g){g=Math.round(g*10)/10;if(g>0)mg.repS=Math.round(((mg.repS||0)+g)*10)/10;mg.repX=(mg.repX||0)+g;while(mg.repX>=1){mg.rep=clamp((mg.rep??10)+1,0,100);mg.repX-=1}while(mg.repX<=-1){mg.rep=clamp((mg.rep??10)-1,0,100);mg.repX+=1}mg.repX=Math.round(mg.repX*10)/10;Rp.repG=[g,why.join(', ')]}}
       Rp.derby=m.derby;
-      Rp.match={h:th.id,a:ta.id,hg,ag,pens:m.pens,comp:m.comp,ev:m.ev.filter(x=>x.type==='goal').map(x=>[x.min,x.side,x.pid]),st:m.st?{h:{...m.st.h},a:{...m.st.a}}:null,sty:[th.style||'N',ta.style||'N'],tac:[th.tactic,ta.tactic],cards:m.ev.filter(x=>x.type==='y'||x.type==='r').map(x=>[x.side,x.type]),subs:m.ev.filter(x=>x.type==='sub').map(x=>[x.min,x.side,x.pid,x.pid2]),red:m.ev.filter(x=>x.type==='r').map(x=>[x.min,x.side,x.pid]),pmiss:m.ev.filter(x=>x.type==='pmiss').map(x=>[x.min,x.side,x.pid]),tacs:m.ev.filter(x=>x.type==='tac').map(x=>[x.min,x.side,x.v]),neutral:!!m.neutral,hf:m.hf};
+      Rp.match={h:th.id,a:ta.id,hg,ag,pens:m.pens,comp:m.comp,ev:m.ev.filter(x=>x.type==='goal').map(x=>[x.min,x.side,x.pid]),st:m.st?{h:{...m.st.h},a:{...m.st.a}}:null,sty:[th.style||'N',ta.style||'N'],tac:[th.tactic,ta.tactic],cards:m.ev.filter(x=>x.type==='y'||x.type==='r').map(x=>[x.side,x.type]),subs:m.ev.filter(x=>x.type==='sub').map(x=>[x.min,x.side,x.pid,x.pid2]),red:m.ev.filter(x=>x.type==='r').map(x=>[x.min,x.side,x.pid]),pmiss:m.ev.filter(x=>x.type==='pmiss').map(x=>[x.min,x.side,x.pid]),tacs:m.ev.filter(x=>x.type==='tac').map(x=>[x.min,x.side,x.v,x.gf??null,x.ga??null]),neutral:!!m.neutral,hf:m.hf};
       Rp.rat=Object.entries(sd.rat).sort((a,b)=>b[1]-a[1]);Rp.xi=sd.played.slice(0,11);Rp.side=sd===m.h?'h':'a';
       if(!m.neutral&&th.id===sd.tid){Rp.att=m.att;Rp.tk=[tkPrice(th,{pm:m.pm||1}),m.tkWhy||'']}
       if(KO.has(m.comp)){Rp.cupAdv=res[sd.tid].adv;Rp.title=res[sd.tid].title||null}}}
@@ -2061,7 +2061,17 @@ function buildPaper(e,ms,rep,humans){const nb=S._nb||[];const C=[];
     if(KO.has(m.comp)&&!s&&w){s=30;txt=`${w.name} avança na ${COMPN[m.comp]}`}
     if(!s){s=10+hg+ag;txt=w?`${w.name} vence o ${l.name}`:`${H.name} e ${A.name} empatam`}
     if(isHuman(H.id)||isHuman(A.id))s+=15;
-    C.push({s,txt,sub:`${H.name} ${hg} × ${ag} ${A.name}${m.pens?` (pênaltis ${m.pens[0]}–${m.pens[1]})`:''} · ${COMPN[m.comp]||''}`})}
+    const scoreLine=`${H.name} ${hg} × ${ag} ${A.name}${m.pens?` (pênaltis ${m.pens[0]}–${m.pens[1]})`:''} · ${COMPN[m.comp]||''}`;
+    C.push({s,txt,sub:scoreLine});
+    const goals=m.ev.filter(x=>x.type==='goal').slice().sort((a,b)=>a.min-b.min);let sh=0,sa=0,comeback=false;
+    goals.forEach(g=>{const before=g.side==='h'?sh-sa:sa-sh;if(before<0)comeback=true;if(g.side==='h')sh++;else sa++});
+    if(w&&comeback&&hg!==ag)C.push({s:Math.max(s+8,64),txt:`Virada! ${w.name} transforma desvantagem em vitória`,sub:`${scoreLine}. Gols: ${goals.map(g=>`${g.min}'`).join(', ')}.`});
+    else if(w&&hg!==ag&&goals.some(g=>g.min>=85))C.push({s:Math.max(36,s-2),txt:`Vitória decidida no fim para ${w.name}`,sub:`Gol decisivo nos minutos finais · ${scoreLine}`});
+    else if(!w&&hg===ag&&d===0)C.push({s:Math.max(12,s-1),txt:`Equilíbrio em campo: ${H.name} e ${A.name} ficam no empate`,sub:scoreLine});
+    const changes=(m.ev||[]).filter(x=>x.type==='tac');
+    const latePush=changes.find(x=>x.v==='O'&&x.min>=70);
+    if(latePush){const team=latePush.side==='h'?H:A;const sc=latePush.side==='h'?`${hg}–${ag}`:`${ag}–${hg}`;C.push({s:22,txt:`${team.name} muda a postura e aumenta a pressão`,sub:`Aos ${latePush.min}', com o placar em ${sc}.`})}
+  }
   nb.filter(n=>/é campeão/.test(n.text)).forEach(n=>C.push({s:100,txt:n.text,sub:entryLabel(e)}));
   nb.filter(n=>/é o artilheiro/.test(n.text)).forEach(n=>C.push({s:46,txt:n.text.split(' é o artilheiro')[0]+' é o artilheiro',sub:n.text}));
   nb.filter(n=>/(Virada no|Punição ao)/.test(n.text)).forEach(n=>C.push({s:80,txt:n.text.split(':')[0],sub:n.text.split(': ').slice(1).join(': ')}));
@@ -2730,7 +2740,13 @@ function matchAnalysis(R,t){const m=R.match;const me=m.h===t.id?'h':'a',op=me===
     else obs.push(Math.abs(xf-xa)<.3?`Empate justo pelas chances (${X}).`:xf>xa?`Faltou converter: vocês criaram mais (${X}).`:`Empate bom: o rival criou mais (${X}).`)}
   (m.red||[]).forEach(([mn,sd,pid])=>obs.push(sd===me?`A expulsão de ${nm(pid)} aos ${mn}' deixou vocês com 10.`:`O rival teve ${nm(pid)} expulso aos ${mn}' e jogou com 10.`));
   (m.pmiss||[]).forEach(([mn,sd,pid])=>obs.push(`${sd===me?'Vocês perderam':'O rival perdeu'} um pênalti aos ${mn}' (${nm(pid)}).`));
-  (m.tacs||[]).filter(x=>x[1]===op).forEach(([mn,,v])=>obs.push(v==='O'?`Atrás no placar, o rival partiu para o ataque aos ${mn}'.`:`Na frente, o rival recuou para segurar o resultado aos ${mn}'.`));const my=(m.sty||[])[me==='h'?0:1]||'N',oy=(m.sty||[])[me==='h'?1:0]||'N';
+  (m.tacs||[]).filter(x=>x[1]===op).forEach(([mn,,v,gf,ga])=>{
+    const scoreKnown=Number.isFinite(gf)&&Number.isFinite(ga);
+    const context=scoreKnown?(gf>ga?'estava vencendo':gf<ga?'estava perdendo':'estava empatando'):'';
+    if(v==='O')obs.push(scoreKnown&&gf<ga?`Atrás no placar (${gf}–${ga}), o rival aumentou a pressão e partiu para o ataque aos ${mn}'.`:scoreKnown&&gf===ga?`Mesmo com o empate (${gf}–${ga}), o rival adotou uma postura mais ofensiva aos ${mn}'.`:`O rival passou a jogar de forma mais ofensiva aos ${mn}'${context?' quando '+context:''}.`);
+    else if(v==='D')obs.push(scoreKnown&&gf>ga?`Na frente (${gf}–${ga}), o rival recuou para proteger a vantagem aos ${mn}'.`:scoreKnown&&gf===ga?`Com o placar empatado (${gf}–${ga}), o rival adotou uma postura mais cautelosa aos ${mn}'.`:`O rival adotou uma postura mais defensiva aos ${mn}'${context?' quando '+context:''}.`);
+    else obs.push(`O rival voltou a uma postura equilibrada aos ${mn}'.${scoreKnown?` O placar era ${gf}–${ga}.`:''}`);
+  });const my=(m.sty||[])[me==='h'?0:1]||'N',oy=(m.sty||[])[me==='h'?1:0]||'N';
   obs.push(`Seu estilo: <b>${STYLES[my][0]}</b> · adversário: <b>${STYLES[oy][0]}</b>.`);
   if(pc(me)>=58)obs.push(`Dominou a posse (${pc(me)}%).`);else if(pc(me)<=42)obs.push(`Jogou sem a bola: ${pc(me)}% de posse.`);
   if(sm.sh>=8&&gf<=1)obs.push(`Finalizou ${sm.sh} vezes (${sm.on} no alvo) e marcou ${gf}: faltou pontaria.`);
@@ -2749,8 +2765,8 @@ function matchAnalysis(R,t){const m=R.match;const me=m.h===t.id?'h':'a',op=me===
   // classificação
   let cls='';if(m.comp==='L'&&R.posB!=null&&R.table){const pa=R.table.findIndex(r=>r[0]===t.id);const d=R.posB-pa;cls=`<span class="label" style="margin-top:6px">Classificação</span><div style="font-size:14px">${R.posB+1}º → <b>${pa+1}º</b> ${d>0?`<span class="up">▲ subiu ${d}</span>`:d<0?`<span class="dn">▼ caiu ${-d}</span>`:'(manteve)'} · ${R.table[pa][1]} pts</div>`}
   return `<div class="panel stack"><span class="label">Estatísticas da partida</span>${stats}
-    <span class="label" style="margin-top:6px">Leitura do jogo</span><ul class="news" style="margin:0">${obs.slice(0,3).map(o=>`<li>${o}</li>`).join('')}</ul></div>
-    ${subH||fit||cls||obs.length>3?fold('posAna','Detalhes do jogo',avg!=null?`<span class="muted" style="font-size:13px">condição ${avg}%</span>`:'','',`${obs.length>3?`<ul class="news" style="margin:0">${obs.slice(3).map(o=>`<li>${o}</li>`).join('')}</ul>`:''}${subH}${fit}${cls}${note('Posse, finalizações e xG (a soma da chance de gol de cada lance) são calculados minuto a minuto pelo motor; os gols saem dessas chances.')}`):''}`}
+    <span class="label" style="margin-top:6px">Leitura do jogo</span><ul class="news" style="margin:0">${obs.slice(0,4).map(o=>`<li>${o}</li>`).join('')}</ul></div>
+    ${subH||fit||cls||obs.length>3?fold('posAna','Detalhes do jogo',avg!=null?`<span class="muted" style="font-size:13px">condição ${avg}%</span>`:'','',`${obs.length>4?`<ul class="news" style="margin:0">${obs.slice(4).map(o=>`<li>${o}</li>`).join('')}</ul>`:''}${subH}${fit}${cls}${note('Posse, finalizações e xG (a soma da chance de gol de cada lance) são calculados minuto a minuto pelo motor; os gols saem dessas chances.')}`):''}`}
 function renderPos(){
   const t=myTeam();const R=S.rep&&S.rep[t.id];
   if(!R)return renderJogo();
