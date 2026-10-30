@@ -1329,8 +1329,10 @@ function transfer(pid,to,price){
   const p=P(pid);if(!p||p.team==null||p.loan)return false;const from=T(p.team),dest=T(to);
   from.players=from.players.filter(i=>i!==pid);from.lineup=from.lineup.filter(i=>i!==pid);
   if(isHuman(from.id)&&hasT(p,'id')){from.mood=clamp((from.mood??60)-3,0,100);news(`A torcida lamenta a saída de ${p.name}, identificado com o clube.`,[from.id])}
-  from.cash+=price;dest.cash-=price;book(from,'sell',price);book(dest,'buy',-price);p.team=to;dest.players.push(pid);p.idol=false;delete p.loan;delete p.sale;delete p.ren;delete p.lendAsk;p.leaving=false;if(isHuman(to))p.bought=absMd();p.since=S.season;p.yc={};p.seen=0;
-  if(!isHuman(from.id))topUp(from)}
+  from.cash+=price;dest.cash-=price;book(from,'sell',price);book(dest,'buy',-price);p.team=to;dest.players.push(pid);p.idol=false;delete p.loan;delete p.sale;delete p.ren;delete p.lendAsk;p.leaving=false;
+  if(isHuman(to))p.bought=absMd();else if(!dest.foreign)p.aiProtectedUntil=absMd()+50;
+  p.since=S.season;p.yc={};p.seen=0;
+  if(!isHuman(from.id))topUp(from);return true}
 
 /* ============ fim de temporada ============ */
 const RKW=[1,.8,.6,.4,.2];
@@ -1715,23 +1717,74 @@ function loanCalc(t,k){k=k||'bank';const s=(UI.ls||{})[k]||{};
   const a=s.a==null?maxA:clamp(s.a,Math.min(5e4,maxA),maxA);
   return {cap,tm,TT,maxA,a,inst:Math.ceil(a*(1+tm.r)/tm.n/100)*100}}
 const sgn=v=>(v>0?'+':v<0?'−':'')+String(Math.abs(Math.round(v*10)/10)).replace('.',',');
-function aiTrim(){let n=0;
-  for(const t of shuffle(S.teams.filter(x=>!isHuman(x.id)&&!x.foreign&&x.div<5))){if(n>=4)break;
-    const budget=(TV[t.div]*NL()+SPON[t.div]*NL()+capOf(t)*PRICE[t.div]*12)/39;if(payroll(t)<=budget*1.05||t.players.length<=16)continue;
-    const p=squad(t).filter(q=>!q.loan&&!q.idol).sort((a,b)=>b.sal-a.sal)[0];if(!p)continue;const price=r1k(value(p));
-    const buyer=S.teams.filter(b=>!isHuman(b.id)&&!b.foreign&&forOK(b,p)&&b.div<t.div&&b.cash>=price*1.2&&b.players.length<24).sort((a,b)=>b.cash-a.cash)[0]||pick(S.teams.filter(b=>b.foreign&&b.players.length<26));if(!buyer)continue;
-    transfer(p.id,buyer.id,price);p.sal=wage(p);p.cEnd=S.season+ri(2,4);n++;news(`${t.name} vende ${p.name} ao ${buyer.name} por ${money(price)} para aliviar a folha.`)}}
-function aiSurplus(t){const reserve=Math.max(CASH[t.div]*.6,payroll(t)*12);return t.cash-reserve}
-function aiReinforce(){aiTrim();const out=[];let n=0;
-  for(const t of shuffle(S.teams.filter(x=>!isHuman(x.id)&&!x.foreign))){if(n>=8)break;
-    if(inDebt(t)||banned(t)||t.players.length>=24)continue;if(t.reinfS!==S.season){t.reinfS=S.season;t.reinfN=0}const sur=aiSurplus(t);if(t.reinfN>=(sur>payroll(t)*30?6:3))continue;
-    const ch=sur>0?Math.min(.6,.1+sur/Math.max(1,payroll(t)*25)):.06*dff().ai*(t.cash>=payroll(t)*20?1:0);if(Math.random()>ch*(sur>0?dff().ai:1))continue;
-    const xi=bestXI(t,[4,4,2]).map(P);const pc=posCount(t);const weak=xi.filter(p=>p.pos!=='G'&&pc[p.pos]<PMAX[p.pos]).sort((a,b)=>a.str-b.str)[0];if(!weak)continue;
-    const budget=Math.min(t.cash*.4,Math.max(sur,t.cash*.25));
-    const c=Object.values(S.players).filter(p=>p.pos===weak.pos&&p.team!=null&&p.team!==t.id&&!p.loan&&!isHuman(p.team)&&!T(p.team).world&&(T(p.team).foreign||T(p.team).div>=t.div)&&forOK(t,p)&&T(p.team).players.length>15&&p.str>=weak.str+4&&p.age<=30&&aiWageOK(t,p)).sort((a,b)=>b.str-a.str).slice(0,8);
-    const aff=c.filter(p=>r1k(value(p)*1.2)<=budget);if(!aff.length)continue;const p=pick(aff.slice(0,4));const price=r1k(value(p)*rnd(1.1,1.3));if(price>budget)continue;
-    const from=T(p.team);transfer(p.id,t.id,price);p.sal=wage(p);p.cEnd=S.season+ri(2,4);n++;t.reinfN++;out.push(`${t.name} se reforça com ${p.name}, que deixa o ${from.name} por ${money(price)}.`)}
-  out.forEach(s=>news(s));return out}
+function aiTrim(){
+  let moved=0;
+  const clubs=shuffle(S.teams.filter(t=>!isHuman(t.id)&&!t.foreign&&t.div<5));
+  for(const t of clubs){
+    if(moved>=3)break;
+    const budget=(TV[t.div]*NL()+SPON[t.div]*NL()+capOf(t)*PRICE[t.div]*12)/39;
+    const over=t.cash<0||payroll(t)>budget*1.3;
+    if(!over||t.players.length<=16)continue;
+    const xi=new Set(bestXI(t,[4,4,2]));
+    const counts=posCount(t);
+    const candidates=squad(t).filter(p=>!p.loan&&!p.idol&&!xi.has(p.id)&&
+      (p.aiProtectedUntil==null||p.aiProtectedUntil<=absMd())&&counts[p.pos]>PMIN[p.pos]);
+    candidates.sort((a,b)=>((b.sal/Math.max(1,b.str))-(a.sal/Math.max(1,a.str)))||a.str-b.str);
+    const p=candidates[0];if(!p)continue;
+    const price=r1k(value(p)*.9);
+    const buyers=S.teams.filter(b=>b.id!==t.id&&!isHuman(b.id)&&!b.world&&forOK(b,p)&&
+      (b.foreign||b.div<t.div)&&b.players.length<24&&b.cash>=price*1.25&&
+      posCount(b)[p.pos]<PMAX[p.pos]).sort((a,b)=>(a.foreign?99:a.div)-(b.foreign?99:b.div)||b.cash-a.cash);
+    const buyer=buyers[0];if(!buyer)continue;
+    if(!transfer(p.id,buyer.id,price))continue;
+    p.sal=wage(p);p.cEnd=S.season+ri(2,4);moved++;
+    news(`${t.name} negocia ${p.name} com ${buyer.name} para ajustar a folha salarial.`);
+  }
+}
+function aiSurplus(t){
+  const reserve=Math.max(CASH[t.div]*.35,payroll(t)*8,debtOf(t)*1.15);
+  return t.cash-reserve;
+}
+function aiCanBuy(t,p,price){
+  const reserve=Math.max(CASH[t.div]*.35,payroll(t)*8,debtOf(t)*1.15);
+  const nextWage=wageFor(p,t);
+  return t.cash-price>=reserve&&payroll(t)+nextWage<=revPerData(t)*.9&&
+    nextWage<=Math.max(2500,revPerData(t)*.12);
+}
+function aiReinforce(){
+  aiTrim();let moved=0;
+  const clubs=shuffle(S.teams.filter(t=>!isHuman(t.id)&&!t.foreign&&!t.world));
+  for(const t of clubs){
+    if(moved>=10)break;
+    if(inDebt(t)||banned(t)||t.players.length>=24)continue;
+    if(t.reinfS!==S.season){t.reinfS=S.season;t.reinfN=0}
+    const sur=aiSurplus(t),limit=sur>payroll(t)*24?6:4;
+    if(t.reinfN>=limit)continue;
+    const chance=sur>0?clamp(.16+sur/Math.max(1,payroll(t)*35),.16,.62):
+      (t.cash>payroll(t)*18?.08*dff().ai:0);
+    if(Math.random()>chance)continue;
+    const pos=needPos(t);if(!pos)continue;
+    const weak=weakStarter(t,pos),budget=Math.min(Math.max(0,sur),t.cash*.42);
+    if(budget<25000)continue;
+    const candidates=Object.values(S.players).filter(p=>p.pos===pos&&p.team!=null&&p.team!==t.id&&
+      !p.loan&&!isHuman(p.team)&&!T(p.team).world&&forOK(t,p)&&T(p.team).players.length>15&&
+      (T(p.team).foreign||T(p.team).div>=t.div)&&posCount(T(p.team))[pos]>PMIN[pos]&&p.str>=weak+4&&p.age<=31&&
+      (p.aiProtectedUntil==null||p.aiProtectedUntil<=absMd())&&aiWageOK(t,p))
+      .sort((a,b)=>(b.str-a.str)||(a.age-b.age)).slice(0,12);
+    const affordable=candidates.filter(p=>{
+      const price=r1k(value(p)*1.12);
+      return price<=budget&&aiCanBuy(t,p,price);
+    });
+    if(!affordable.length)continue;
+    const p=pick(affordable.slice(0,Math.min(5,affordable.length)));
+    const price=r1k(value(p)*1.12),from=T(p.team);
+    if(!transfer(p.id,t.id,price))continue;
+    p.sal=wage(p);p.cEnd=S.season+ri(2,4);p.aiProtectedUntil=absMd()+50;
+    t.reinfN++;moved++;
+    news(`${t.name} reforça ${({G:'o gol',D:'a defesa',M:'o meio-campo',A:'o ataque'})[pos]} com ${p.name}, contratado do ${from.name} por ${money(price)}.`);
+  }
+  return moved;
+}
 const PMAX={G:3,D:7,M:7,A:6},PMIN={G:2,D:4,M:4,A:3};
 const posCount=t=>{const c={G:0,D:0,M:0,A:0};squad(t).forEach(p=>c[p.pos]++);return c};
 function weakStarter(t,pos){const s=bestXI(t,[4,4,2]).map(P).filter(p=>p&&p.pos===pos);return s.length?Math.min(...s.map(p=>p.str)):BASE[t.div]-5}
@@ -1740,7 +1793,7 @@ function needPos(t){const c=posCount(t);const low=Object.keys(PMIN).filter(k=>c[
   for(const k of ['G','D','M','A']){if(c[k]>=PMAX[k])continue;const s=xi.filter(p=>p.pos===k);if(!s.length)return k;const w=Math.min(...s.map(p=>p.str));const gp=avg-w+Math.random()*3;if(gp>gap){gap=gp;best=k}}return best}
 function aiBalance(){let moves=0;const out=[];
   for(const t of shuffle(S.teams.filter(x=>!isHuman(x.id)&&!x.foreign))){if(moves>=8)break;const c=posCount(t);const pos=Object.keys(PMAX).find(k=>c[k]>PMAX[k]);if(!pos)continue;
-    const xi=new Set(bestXI(t,[4,4,2]));const p=squad(t).filter(q=>q.pos===pos&&!xi.has(q.id)&&!q.loan&&!q.idol).sort((a,b)=>a.str-b.str||b.age-a.age)[0];if(!p)continue;
+    const xi=new Set(bestXI(t,[4,4,2]));const p=squad(t).filter(q=>q.pos===pos&&!xi.has(q.id)&&!q.loan&&!q.idol&&(q.aiProtectedUntil==null||q.aiProtectedUntil<=absMd())).sort((a,b)=>a.str-b.str||b.age-a.age)[0];if(!p)continue;
     const price=r1k(value(p)*.9);const buyer=S.teams.filter(b=>b.id!==t.id&&!isHuman(b.id)&&!b.foreign&&!banned(b)&&forOK(b,p)&&posCount(b)[pos]<PMAX[pos]&&b.players.length<24&&b.cash>=price*1.3&&p.str>=weakStarter(b,pos)-6).sort((a,b)=>a.div-b.div||b.cash-a.cash)[0];
     if(buyer){transfer(p.id,buyer.id,price);p.sal=wage(p);p.cEnd=S.season+ri(1,3);out.push(`${p.name} deixa o ${t.name} e vai para o ${buyer.name} por ${money(price)}.`)}
     else releaseFree(p);moves++}
@@ -1753,8 +1806,8 @@ function aiMarket(){
   for(let k=ri(0,2);k>0;k--){
     const buyer=wpick(ai,t=>Math.max(1,t.cash/1e6)+(4-t.div)*2);if(buyer.players.length>=22||inDebt(buyer)||banned(buyer))continue;
     const pos=needPos(buyer);if(!pos)continue;const bar=weakStarter(buyer,pos)+3;
-    const cands=Object.values(S.players).filter(p=>p.pos===pos&&p.team!=null&&!p.loan&&p.team!==buyer.id&&!isHuman(p.team)&&!T(p.team).world&&forOK(buyer,p)&&T(p.team).div>=buyer.div&&T(p.team).players.length>15&&p.str>=bar&&p.age<=31).sort((a,b)=>b.str-a.str).slice(0,8);
-    if(!cands.length)continue;const p=pick(cands);const price=r1k(value(p)*rnd(1,1.3));if(buyer.cash<price*1.3)continue;
+    const cands=Object.values(S.players).filter(p=>p.pos===pos&&p.team!=null&&!p.loan&&p.team!==buyer.id&&!isHuman(p.team)&&!T(p.team).world&&forOK(buyer,p)&&T(p.team).div>=buyer.div&&T(p.team).players.length>15&&posCount(T(p.team))[pos]>PMIN[pos]&&p.str>=bar&&p.age<=31&&(p.aiProtectedUntil==null||p.aiProtectedUntil<=absMd())).sort((a,b)=>b.str-a.str).slice(0,8);
+    if(!cands.length)continue;const affordable=cands.filter(q=>{const v=r1k(value(q)*1.15);return aiCanBuy(buyer,q,v)&&buyer.cash>=v*1.15});if(!affordable.length)continue;const p=pick(affordable.slice(0,4));const price=r1k(value(p)*1.15);if(!aiCanBuy(buyer,p,price))continue;
     const from=T(p.team);transfer(p.id,buyer.id,price);p.sal=wage(p);p.cEnd=S.season+ri(1,4);out.push(`${p.name} deixa o ${from.name} e vai para o ${buyer.name} por ${money(price)}.`)}
   S.free=(S.free||[]).filter(id=>P(id)&&P(id).team==null);
   for(let k=0;k<2&&S.free.length;k++){if(Math.random()>.5)continue;const top=S.free.map(P).sort((a,b)=>b.str-a.str).slice(0,4);const p=wpick(top,(x,i)=>Math.max(1,x.str-30));if(!p)continue;
