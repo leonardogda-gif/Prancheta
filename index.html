@@ -644,17 +644,17 @@ function setForeignId(t,c,regen){const [n,s,ctry,lv,c1,c2]=c;t.name=n;t.short=s.
   if(!regen)return;const wipe=new Set(t.players);S.market=S.market.filter(x=>!wipe.has(x.pid));for(const id of t.players){const p=P(id);if(p&&p.team===t.id)delete S.players[id]}t.players=[];t.lineup=[];
   const base=fBase(t.world,lv);const lay={G:2,D:6,M:6,A:4};for(const pos in lay)for(let i=0;i<lay[pos];i++)t.players.push(makePlayer(pos,base+rnd(-3,3),t.id).id);
   t.coach=null;t.tactic='E';t.form=pick(FORMS)}
-function drawForeign(first){const fs=S.teams.filter(t=>t.foreign&&!t.world),ws=S.teams.filter(t=>t.world);const lines=[];const keepK=S.kchamp!=null&&T(S.kchamp)&&T(S.kchamp).foreign&&!T(S.kchamp).world?T(S.kchamp).name:null;
+function drawForeign(first){const fs=S.teams.filter(t=>t.foreign&&!t.world),ws=S.teams.filter(t=>t.world&&!t.euro);const lines=[];const keepK=S.kchamp!=null&&T(S.kchamp)&&T(S.kchamp).foreign&&!T(S.kchamp).world?T(S.kchamp).name:null;
   const by={};FSLOTS.forEach(c=>by[c]=(by[c]||0)+1);const chosen={};
   for(const c in by){const pool=FPOOL.filter(x=>x[2]===c).map(x=>({x,s:x[3]*10+rnd(0,22)+(x[0]===keepK?100:0)})).sort((a,b)=>b.s-a.s).slice(0,by[c]).map(o=>o.x);chosen[c]=pool;
     pool.forEach((x,i)=>lines.push(x[0]===keepK?`${x[0]} (atual campeão)`:`${x[0]} (${i===0?'campeão':'vice'} ${CTRYADJ[c]})`))}
   for(const c in chosen){const slots=fs.filter(t=>FSLOTS[fs.indexOf(t)]===c||(t.country===c&&!FSLOTS.includes(t.country)));const mine=fs.filter((t,i)=>FSLOTS[i]===c);const list=chosen[c].slice();
     const stay=first?[]:mine.filter(t=>list.some(x=>x[0]===t.name)&&Math.abs(teamRating(t)-fBase(false,t.flv||3)-4)<=10);stay.forEach(t=>{const x=list.find(y=>y[0]===t.name);list.splice(list.indexOf(x),1)});mine.filter(t=>!stay.includes(t)).forEach((t,i)=>{if(list[i])setForeignId(t,list[i],true)})}
-  const eu=WPOOL.filter(x=>x[6]),ot=WPOOL.filter(x=>!x[6]);const pickW=(arr,n)=>arr.map(x=>({x,s:x[3]*10+rnd(0,20)})).sort((a,b)=>b.s-a.s).slice(0,n).map(o=>o.x);const wsel=[...pickW(eu,2),...pickW(ot,1)];
+  const eu=WPOOL.filter(x=>x[6]),ot=WPOOL.filter(x=>!x[6]);const pickW=(arr,n)=>arr.map(x=>({x,s:x[3]*10+rnd(0,20)})).sort((a,b)=>b.s-a.s).slice(0,n).map(o=>o.x);const wsel=S.euroV1?pickW(ot,ws.length):[...pickW(eu,2),...pickW(ot,1)];
   const wl=wsel.slice();const wstay=first?[]:ws.filter(t=>wl.some(x=>x[0]===t.name)&&Math.abs(teamRating(t)-fBase(true,t.flv||4)-4)<=10);wstay.forEach(t=>{wl.splice(wl.findIndex(x=>x[0]===t.name),1)});ws.filter(t=>!wstay.includes(t)).forEach((t,i)=>{if(wl[i])setForeignId(t,wl[i],true)});
-  if(!first)news(`Classificados de fora para a Copa Continental: ${lines.join(', ')}. No Mundial, esperam o campeão: ${wsel.map(x=>x[0]).join(', ')}.`);
+  if(!first)news(`Classificados de fora para a Copa Continental: ${lines.join(', ')}. No Mundial, esperam o campeão: ${S.euroV1?'os finalistas da Liga dos Campeões e o '+wsel.map(x=>x[0]).join(', '):wsel.map(x=>x[0]).join(', ')}.`);
   ensureCoaches()}
-function realForeignNames(){const fs=S.teams.filter(t=>t.foreign&&!t.world),ws=S.teams.filter(t=>t.world);const used=new Set();
+function realForeignNames(){const fs=S.teams.filter(t=>t.foreign&&!t.world),ws=S.teams.filter(t=>t.world&&!t.euro);const used=new Set();
   fs.forEach((t,i)=>{const c=FSLOTS[i]||t.country;const x=FPOOL.filter(y=>y[2]===c&&!used.has(y[0])).sort((a,b)=>b[3]-a[3])[0];if(x){used.add(x[0]);setForeignId(t,x,false)}});
   const w=[WPOOL[0],WPOOL[4],WPOOL[14]];ws.forEach((t,i)=>{if(w[i])setForeignId(t,w[i],false)})}
 const GOALN={title:'Ser campeão da série',up:'Subir de divisão',top4:'Vaga na Continental',mid:'Terminar entre os 4 primeiros',safe:'Não cair'};
@@ -670,8 +670,8 @@ const TRAINN={N:'Normal',F:'Físico',T:'Tático',A:'Ataque',D:'Defesa'};
 const DIFF={F:{n:'Fácil',inc:1,wage:1,ai:.5,board:.8,cash:1.5,deal:.9},N:{n:'Normal',inc:1,wage:1,ai:1,board:1,cash:1,deal:1},D:{n:'Difícil',inc:1,wage:1,ai:1.6,board:1.2,cash:.7,deal:1.1}};
 const dff=()=>DIFF[(S&&S.diff)||'N'];
 const CK=c=>c==='E'||c==='ES'||c==='EF'?'E':c==='C'?'C':c==='K'||c==='KQ'||c==='KS'||c==='KF'?'K':c==='M0'||c==='M1'?'M':'L';
-const KO=new Set(['C','ES','EF','KQ','KS','KF','M0','M1','DS','DF']);
-const COMPN={DS:'Série D',DF:'Série D',L:'Nacional',C:'Copa Nacional',E:'Estadual',ES:'Estadual',EF:'Estadual',K:'Continental',KQ:'Continental',KS:'Continental',KF:'Continental',M0:'Mundial',M1:'Mundial'};
+const KO=new Set(['US','UF','C','ES','EF','KQ','KS','KF','M0','M1','DS','DF']);
+const COMPN={DS:'Série D',DF:'Série D',L:'Nacional',C:'Copa Nacional',E:'Estadual',ES:'Estadual',EF:'Estadual',K:'Continental',KQ:'Continental',KS:'Continental',KF:'Continental',M0:'Mundial',M1:'Mundial',EU:'Europão',UG:'Liga dos Campeões',US:'Liga dos Campeões',UF:'Liga dos Campeões'};
 const COMP='Banco Horizonte|Cimentos Rocha Firme|Construtora Alicerce|Laticínios Serra Boa|Farmácias Vida Plena|Supermercados Bom Preço|Transportadora Rota Sul|Café Grão Dourado|Imobiliária Chave Certa|Auto Peças Turbo|Conecta Telecom|Calçados Passo Firme|Seguros Amparo|Pneus Rodagem|Solar Brilho Energia|Moinho Trigo Bom|Colchões Sono Leve|Tintas Arco-Íris|Água Fonte Clara|Distribuidora Norte Sul'.split('|');
 const LEDN={lfee:'Taxa de empréstimo',art:'Prêmio de artilheiro',inv:'Investidor da TV',fac:'Manutenção da estrutura',est:'Prêmios do estadual',cont:'Copa Continental',mund:'Mundial',loan:'Parcela do banco',fin:'Financeira',adv:'Antecipação da TV',recv:'Parcelas recebidas',inst:'Parcelas pagas',staff:'Comissão técnica',juros:'Juros do caixa negativo',gate:'Bilheteria',tv:'TV · parte fixa',tvA:'TV · audiência',tvB:'TV · desempenho',tvC:'TV · copas',spon:'Patrocínio',nr:'Naming rights',cup:'Prêmio da Copa',wages:'Salários'};
 const POSN={G:'GOL',D:'ZAG',M:'MEI',A:'ATA'};
@@ -769,6 +769,7 @@ const fac=(tid,k)=>tid!=null&&T(tid)&&T(tid).fac?T(tid).fac[k]||0:0;
 function ensureExtras(){
   if(!S.priceV2){S.teams.forEach(t=>{if(!isHuman(t.id))t.price=refPrice(t)});S.priceV2=true}
   if(!S.realFV1){if(S.teams.some(t=>t.foreign))realForeignNames();S.realFV1=true}
+  if(!S.euroV1&&S.teams.some(t=>t.world))ensureEuro();
   S.teams.forEach(t=>{if(!t.fac)t.fac=t.foreign?{ct:3,dm:3,base:3}:{ct:[3,2,1,0,3,0][t.div],dm:[3,2,1,0,3,0][t.div],base:[2,1,1,0,3,0][t.div]};
     if(t.chem==null)t.chem=70;if(!t.train)t.train='N';if(!t.troph)t.troph=[];if(!t.rec)t.rec={g:{},a:{},n:{},win:null}});
   Object.values(S.players).forEach(p=>{if(p.caps==null)p.caps=0;if(p.nt==null)p.nt=0});
@@ -830,7 +831,55 @@ function benchCheck(L){S.managers.forEach(mg=>{if(mg.out||mg.fired)return;const 
     if(p.benchN>=3){unhappy++;if(p.benchN===3)news(`${p.name} reclama da falta de minutos e o vestiário sente.`,[t.id]);
       if(p.minProm&&absMd()>p.minProm){delete p.minProm;p.wantOut=1;t.chem=Math.max(30,(t.chem??70)-6);news(`${p.name} se sente enganado: a promessa de minutos não foi cumprida e ele quer sair.`,[t.id])}}}
   if(unhappy)t.chem=Math.max(30,(t.chem??70)-Math.min(4,2*unhappy))})}
-const EUCLUBS=()=>WPOOL.filter(x=>x[6]).map(x=>x[0]);
+const EUPOOL=[['Real Madrid','RMA','ESP',5,'#ffffff','#d4af37'],['Barcelona','FCB','ESP',5,'#a50044','#004d98'],['Manchester City','MCI','ING',5,'#6cabdd','#ffffff'],['Liverpool','LIV','ING',5,'#c8102e','#f6eb61'],['Bayern de Munique','BAY','ALE',5,'#dc052d','#ffffff'],['Paris Saint-Germain','PSG','FRA',5,'#004170','#da291c'],['Inter de Milão','INM','ITA',5,'#0068a8','#111111'],
+  ['Atlético de Madrid','ATM','ESP',4,'#cb3524','#ffffff'],['Arsenal','ARS','ING',4,'#ef0107','#ffffff'],['Chelsea','CHE','ING',4,'#034694','#ffffff'],['Manchester United','MUN','ING',4,'#da291c','#111111'],['Juventus','JVT','ITA',4,'#ffffff','#111111'],['Milan','MIL','ITA',4,'#fb090b','#111111'],['Borussia Dortmund','BVB','ALE',4,'#fde100','#111111'],['Napoli','NAP','ITA',4,'#12a0d7','#ffffff'],['Benfica','BEN','POR',4,'#e30613','#ffffff'],
+  ['Porto','FCP','POR',3,'#0050a0','#ffffff'],['Sporting','SCP','POR',3,'#008057','#ffffff'],['Sevilla','SEV','ESP',3,'#ffffff','#d71920'],['Villarreal','VLR','ESP',3,'#ffe667','#005187'],['Real Sociedad','RSO','ESP',3,'#0067b1','#ffffff'],['Tottenham','TOT','ING',3,'#ffffff','#132257'],['Newcastle','NEW','ING',3,'#241f20','#ffffff'],
+  ['RB Leipzig','RBL','ALE',3,'#dd0741','#ffffff'],['Bayer Leverkusen','LEV','ALE',3,'#e32221','#111111'],['Roma','ROM','ITA',3,'#8e1f2f','#f0bc42'],['Lazio','LAZ','ITA',3,'#87d8f7','#ffffff'],['Olympique de Marselha','OLM','FRA',3,'#2faee0','#ffffff'],['Lyon','LYO','FRA',3,'#ffffff','#da0812'],['Monaco','MCO','FRA',3,'#e51b22','#ffffff']];
+const EUC=['ESP','ING','ALE','ITA','FRA','POR'];
+const EUCLUBS=()=>S&&S.euro?S.euro.ids.map(id=>T(id).name):WPOOL.filter(x=>x[6]).map(x=>x[0]);
+const isEuC=c=>/^(EU|UG|US|UF)$/.test(c);
+function ensureEuro(){if(S.euroV1)return;const blank=()=>({j:0,v:0,e:0,d:0,gp:0,gc:0,pts:0});
+  const ws=S.teams.filter(t=>t.world&&!t.euro);const keep=ws.find(t=>!EUC.includes(t.country))||ws[ws.length-1];const conv=ws.filter(t=>t!==keep);
+  const ids=conv.map(t=>t.id);while(ids.length<16){const id=S.teams.length;const t=makeTeam(id,4,'Europa '+id,(id*53)%360);Object.assign(t,{foreign:true,world:true,country:'ESP',spon:null,sOffers:[],nr:null,nOffers:[],mood:60,formSel:'4-4-2',pOffers:[],reqs:[],loan:null});S.teams.push(t);ids.push(id)}
+  const init=EUPOOL.filter(x=>x[3]>=4).slice(0,16);ids.forEach((id,i)=>{const t=T(id);t.euro=true;t.world=true;t.foreign=true;t.troph=t.troph||[];setForeignId(t,init[i],true);if(S.tab)S.tab[id]=S.tab[id]||blank()});
+  S.euro={ids};S.euroV1=true;S.ko=S.ko||{};S.ko.US=S.ko.US||[];S.ko.UF=S.ko.UF||[];
+  if(keep&&!EUC.includes(keep.country)===false){const ot=WPOOL.filter(x=>!x[6]);if(ot.length)setForeignId(keep,pick(ot),true)}
+  S.world=S.teams.filter(t=>t.world&&!t.euro).map(t=>t.id);
+  if(S.cal)euroSeason(S.md);if(typeof ensureCoaches==='function')ensureCoaches()}
+function euroDates(from){const pr=['L','E','ES','EF','KQ'];let ix=S.cal.map((e,i)=>pr.includes(e.t)&&i>=from?i:-1).filter(i=>i>=0);
+  if(ix.length<30){const c=S.cal.map((e,i)=>e.t==='C'&&i>=from?i:-1).filter(i=>i>=0);ix=[...ix,...c.slice(0,30-ix.length)].sort((a,b)=>a-b)}return ix.slice(0,30)}
+function euroSeason(from){if(!S.euro)return;from=from||0;const blank=()=>({j:0,v:0,e:0,d:0,gp:0,gc:0,pts:0});const ids=S.euro.ids;
+  S.eufix=roundRobin(ids);S.eudates=euroDates(from);S.eutab={};ids.forEach(id=>S.eutab[id]=blank());
+  S.ko=S.ko||{};S.ko.US=[];S.ko.UF=[];S.uclchamp=null;const k0=S.cal.findIndex(e=>e.t==='K'&&e.r===0);
+  if(k0>=from){let parts=(S.uclNext||[]).filter(id=>ids.includes(id));if(parts.length<8)parts=[...parts,...ids.filter(id=>!parts.includes(id)).sort((a,b)=>teamRating(T(b))-teamRating(T(a)))].slice(0,8);
+    const sd=parts.slice().sort((a,b)=>teamRating(T(b))-teamRating(T(a)));S.uclg=[[sd[0],sd[3],sd[4],sd[7]],[sd[1],sd[2],sd[5],sd[6]]];S.uclfix=S.uclg.map(g=>roundRobin(g));S.ucltab={};parts.forEach(id=>S.ucltab[id]=blank());S.uclOn=true}
+  else S.uclOn=false}
+function euroPairs(e){if(!S||!S.euro||!S.eufix||!e)return [];const i=S.cal.indexOf(e);const out=[];const k=S.eudates?S.eudates.indexOf(i):-1;
+  if(k>=0&&S.eufix[k])S.eufix[k].forEach(([h,a])=>out.push({h,a,comp:'EU',div:9}));
+  if(S.uclOn){if(e.t==='K'&&S.uclfix)S.uclfix.forEach((fx,g)=>(fx[e.r]||[]).forEach(([h,a])=>out.push({h,a,comp:'UG',grp:g,div:9})));
+    if(e.t==='KS'&&S.uclg){const s=S.uclg.map(g=>grpSort(g,S.ucltab));out.push({h:s[0][0],a:s[1][1],comp:'US',div:9},{h:s[1][0],a:s[0][1],comp:'US',div:9})}
+    if(e.t==='KF'){const w=(S.ko.US||[]).map(x=>x.w);if(w.length===2)out.push({h:w[0],a:w[1],comp:'UF',neutral:true,div:9})}}
+  return out}
+function mundW(){if(!S.euro)return S.world;const f=(S.ko.UF||[])[0];const oth=S.teams.find(t=>t.world&&!t.euro);let e1,e2;
+  if(f){e1=f.w;e2=f.w===f.h?f.a:f.h}else{const r=S.euro.ids.slice().sort((a,b)=>teamRating(T(b))-teamRating(T(a)));e1=r[0];e2=r[1]}return [e2,e1,oth?oth.id:null]}
+function euroJoin(p,tid){const e=T(tid);p.team=tid;e.players.push(p.id);p.br=1;p.cEnd=S.season+ri(2,4);p.since=S.season;p.sal=wage(p);delete p.sale;delete p.ren;delete p.lendAsk;p.loan=null;delete p.euUnhappy;delete p.forceOut;
+  while(e.players.length>25){const w=e.players.map(P).filter(q=>q&&!q.br).sort((a,b)=>a.str-b.str)[0];if(!w)break;e.players=e.players.filter(i=>i!==w.id);e.lineup=(e.lineup||[]).filter(i=>i!==w.id);delete S.players[w.id]}}
+const euroBuyer=()=>T(wpick(S.euro.ids,id=>Math.pow(T(id).flv||4,2)));
+function euroAISale(){if(!S.euro||Math.random()>.06)return;const c=Object.values(S.players).filter(p=>p.team!=null&&!p.loan&&p.str>=86&&p.age<=28&&!isHuman(p.team)&&!T(p.team).foreign&&T(p.team).div===0&&T(p.team).players.length>18);if(!c.length)return;
+  const p=pick(c);const from=T(p.team);const et=euroBuyer();const amt=r1k(value(p)*rnd(1.2,1.5));from.cash+=amt;book(from,'sell',amt);from.players=from.players.filter(i=>i!==p.id);from.lineup=from.lineup.filter(i=>i!==p.id);
+  euroJoin(p,et.id);news(`${p.name} deixa o ${from.name} e vai para o ${et.name} por ${money(amt)}.`)}
+function euroRefresh(){if(!S.euro)return;for(const id of S.euro.ids){const t=T(id);const tg=fBase(true,t.flv||4)+1;
+    while(t.players.length<20)t.players.push(makePlayer(pick(['D','M','A','M','D','G']),tg-4,t.id).id);
+    for(let k=0;k<5&&teamRating(t)<tg-1;k++){const xi=bestXI(t,[4,4,2]).map(P).filter(Boolean);const w=xi.sort((a,b)=>a.str-b.str)[0];if(!w)break;
+      t.players=t.players.filter(i=>i!==w.id);t.lineup=(t.lineup||[]).filter(i=>i!==w.id);if(w.br){w.team=null;w.freeSince=S.season;(S.free=S.free||[]).push(w.id)}else delete S.players[w.id];
+      const np=makePlayer(w.pos,tg+3,t.id);np.age=ri(22,29);np.pot=Math.max(np.pot,np.str);np.sal=wage(np);t.players.push(np.id)}
+    while(t.players.length>25){const w=t.players.map(P).filter(p=>p&&!p.br).sort((a,b)=>a.str-b.str)[0];if(!w)break;t.players=t.players.filter(i=>i!==w.id);delete S.players[w.id]}
+    t.lineup=[]}}
+function euroEnd(sum){if(!S.euro||!S.eutab)return;const ids=grpSort(S.euro.ids,S.eutab);const ch=ids[0];T(ch).troph.push({n:'Europão',s:S.season});news(`${T(ch).name} é campeão do Europão!`);
+  sum.eu=ch;sum.ucl=S.uclchamp??null;S.uclNext=ids.slice(0,8);const down=ids.slice(-2);const inL=new Set(S.euro.ids.map(id=>T(id).name));
+  down.forEach(id=>{const t=T(id);const cand=EUPOOL.filter(y=>!inL.has(y[0]));if(!cand.length)return;const x=wpick(cand,y=>y[3]*y[3]);inL.add(x[0]);const old=t.name;
+    t.players.map(P).filter(p=>p&&p.br).forEach(p=>{t.players=t.players.filter(i=>i!==p.id);const dest=T(pick(S.euro.ids.filter(j=>!down.includes(j))));p.team=dest.id;dest.players.push(p.id)});
+    setForeignId(t,x,true);t.troph=[];news(`${old} cai do Europão; o ${x[0]} assume a vaga.`)})}
 const WCAP=.6;
 function capOK(){return true}
 function capOK0(t,add,what){if(!t||add<=0||!isHuman(t.id)||t.players.length<16)return true;const lim=revPerData(t)*WCAP,pay=payroll(t);if(pay+add<=lim)return true;
@@ -843,7 +892,10 @@ function wageBoard(){S.managers.forEach(mg=>{if(mg.out||mg.fired||mg.team==null)
   if(my<0)news(`Folha alta e derrota: a diretoria do ${t.name} perde a paciência com ${mg.name} (−${pen} de confiança).`,[t.id])})}
 function domOf(t){if(!t||t.foreign)return 0;const r=teamRating(t);const o=S.teams.filter(x=>x.div===t.div&&x.id!==t.id&&!x.foreign).map(teamRating);return o.length?r-Math.max(...o):0}
 function euStarsArrive(){const n=ri(5,7),out=[];S.free=S.free||[];
-  for(let i=0;i<n;i++){const p=makePlayer(pick(['G','D','D','M','M','M','A','A','A']),90,null);p.age=ri(29,33);p.str=ri(88,93);p.pot=p.str;p.tr=genTraits(p);p.sal=wage(p);
+  if(S.euro){const used=new Set();const c=S.euro.ids.flatMap(id=>T(id).players.map(P)).filter(p=>p&&p.age>=29&&p.str>=86).sort((a,b)=>(b.br?1:0)-(a.br?1:0)||Math.random()-.5);
+    for(const p of c){if(out.length>=n)break;if(used.has(p.team))continue;const t=T(p.team);used.add(t.id);t.players=t.players.filter(i=>i!==p.id);t.lineup=(t.lineup||[]).filter(i=>i!==p.id);
+      p.team=null;p.idol=false;p.freeSince=S.season;p.cEnd=S.season;p.euStar=1;p.exClub=t.name;p.sal=wage(p);S.free.push(p.id);out.push(`${p.name} (${p.str}, ex-${p.exClub})`)}}
+  for(let i=out.length;i<n;i++){const p=makePlayer(pick(['G','D','D','M','M','M','A','A','A']),90,null);p.age=ri(29,33);p.str=ri(88,93);p.pot=p.str;p.tr=genTraits(p);p.sal=wage(p);
     p.team=null;p.idol=false;p.freeSince=S.season;p.cEnd=S.season;p.euStar=1;p.exClub=pick(EUCLUBS());S.free.push(p.id);out.push(`${p.name} (${p.str}, ex-${p.exClub})`)}
   news(`Voltam da Europa e estão sem clube: ${out.join(', ')}.`)}
 function aiStarSign(){const st=(S.free||[]).map(P).filter(p=>p&&p.euStar&&p.team==null);
@@ -860,7 +912,7 @@ function sellTight(t){const pr=payroll(t),rv=revPerData(t);return t.cash<pr*10&&
 function dilValid(t,d){if(!d||d.s!==S.season)return false;if(d.k==='sell'&&!sellTight(t))return false;if(d.k==='talk')return d.md===S.md;if(d.k==='focus')return !(t.focus&&t.focus.s===S.season);
   if(d.pid!=null){const p=P(d.pid);return !!p&&p.team===t.id&&!p.loan}return true}
 function focF(tid,comp){const t=T(tid);const f=t&&t.focus;if(!f||f.s!==S.season||f.v==='B')return 1;let ck=CK(comp);if(ck==='M')ck='K';return ck===f.v?1.04:.97}
-function dilAtt(X,m,min){let f=focF(X.tid,m.comp);const tk=T(X.tid).talk;if(X.human&&tk&&tk.md===S.md){if(tk.v==='press')f*=min<=45?1.05:.95;else if(tk.v==='motiv')f*=1.03}return f}
+function dilAtt(X,m,min){let f=focF(X.tid,m.comp);if(m.comp==='M0'||m.comp==='M1'){if(X.tid===S.kchamp)f*=1.05;else if(T(X.tid).euro)f*=.98}const tk=T(X.tid).talk;if(X.human&&tk&&tk.md===S.md){if(tk.v==='press')f*=min<=45?1.05:.95;else if(tk.v==='motiv')f*=1.03}return f}
 function dilBig(t){if(S.md>=S.cal.length)return null;const fx=nextFixtureFor(t.id);if(!fx||fx.none)return null;const e=fx.e,comp=fx.comp;const opp=fx.h===t.id?fx.a:fx.h;if(opp==null||!T(opp))return null;
   const fin=/F$/.test(comp)||comp==='M1'||(comp==='C'&&e&&CUPN[e.s]==='Final');const semi=!fin&&(/S$/.test(comp)||comp==='M0'||(comp==='C'&&e&&CUPN[e.s]==='Semifinal'));
   const derby=!T(opp).foreign&&!t.foreign&&isDerby(fx.h,fx.a);return fin?{w:'a final',opp}:semi?{w:'a semifinal',opp}:derby?{w:'o clássico',opp}:null}
@@ -930,16 +982,17 @@ function dilApply(t,mg,d,o){const p=d.pid!=null?P(d.pid):null;
     else if(o==='L'&&mg.cgoal&&!mg.cgoal.done){const c=mg.cgoal;if(c.target==='win')c.target=c.comp==='C'?'qf':'semi';else mg.cgoal=null}
     return `${mg.name} define a prioridade da temporada: ${FOCN[o]}.`}
   return null}
-function euroMarket(){S.managers.forEach(mg=>{if(mg.out||mg.fired)return;const t=T(mg.team);t.euOffers=(t.euOffers||[]).filter(o=>o.exp>=S.md&&P(o.pid)&&P(o.pid).team===t.id);
+function euroMarket(){euroMarketH();euroAISale()}
+function euroMarketH(){S.managers.forEach(mg=>{if(mg.out||mg.fired)return;const t=T(mg.team);t.euOffers=(t.euOffers||[]).filter(o=>o.exp>=S.md&&P(o.pid)&&P(o.pid).team===t.id);
   if(t.euOffers.length)return;if(!t.euN||t.euN.s!==S.season)t.euN={s:S.season,n:0};if(t.euN.n>=3)return;const el=squad(t).filter(p=>!p.loan&&p.str>=88&&p.age<=30&&p.euS!==S.season);if(!el.length)return;
   const ch=Math.min(.2,.05*(1+Math.max(0,domOf(t))/3));if(Math.random()>ch)return;
-  for(const p of [wpick(el,x=>Math.max(1,x.str-85)*(x.age<=27?1.5:x.age===30?.3:1)*(x.cEnd-S.season>=3?.35:1))]){const club=pick(EUCLUBS());const amount=r1k(value(p)*rnd(1.3,1.8));p.euS=S.season;t.euN.n++;
-    if(p.forceOut){euSell(t,p,club,amount,true);break}
-    t.euOffers.push({pid:p.id,club,amount,exp:S.md+2});news(`O ${club} faz proposta de ${money(amount)} por ${p.name}.`,[t.id]);break}})}
+  for(const p of [wpick(el,x=>Math.max(1,x.str-85)*(x.age<=27?1.5:x.age===30?.3:1)*(x.cEnd-S.season>=3?.35:1))]){const et=S.euro?euroBuyer():null;const club=et?et.name:pick(EUCLUBS());const amount=r1k(value(p)*rnd(1.3,1.8));p.euS=S.season;t.euN.n++;
+    if(p.forceOut){euSell(t,p,club,amount,true,et?et.id:null);break}
+    t.euOffers.push({pid:p.id,club,amount,exp:S.md+2,tid:et?et.id:null});news(`O ${club} faz proposta de ${money(amount)} por ${p.name}.`,[t.id]);break}})}
 const euLoyal=p=>p.idol||hasT(p,'id');
-function euSell(t,p,club,amount,forced){t.cash+=amount;book(t,'sell',amount);t.players=t.players.filter(i=>i!==p.id);t.lineup=t.lineup.filter(i=>i!==p.id);t.euOffers=(t.euOffers||[]).filter(o=>o.pid!==p.id);
+function euSell(t,p,club,amount,forced,tid){if(tid==null&&S.euro){const et=S.euro.ids.map(T).find(x=>x.name===club)||euroBuyer();tid=et.id;club=et.name}t.cash+=amount;book(t,'sell',amount);t.players=t.players.filter(i=>i!==p.id);t.lineup=t.lineup.filter(i=>i!==p.id);t.euOffers=(t.euOffers||[]).filter(o=>o.pid!==p.id);
   t.pOffers=(t.pOffers||[]).filter(o=>o.pid!==p.id);if(p.idol)t.mood=clamp((t.mood??60)-10,0,100);news(forced?`${p.name} força a saída e vai para o ${club} por ${money(amount)}.`:`${p.name} é vendido ao ${club} por ${money(amount)}.`,[t.id]);
-  logDeal(t,`Vendeu ${p.name} ao ${club} por ${money(amount)}`);delete S.players[p.id]}
+  logDeal(t,`Vendeu ${p.name} ao ${club} por ${money(amount)}`);if(tid!=null)euroJoin(p,tid);else delete S.players[p.id]}
 function renderEuOffers(t){const os=(t.euOffers||[]).filter(o=>o.exp>=S.md&&P(o.pid)&&P(o.pid).team===t.id);if(!os.length)return '';
   return `<div class="panel stack" style="border-color:var(--info)"><span class="label">Proposta da Europa</span>${os.map(o=>{const p=P(o.pid);return `<div class="offer stack" style="gap:6px"><span style="font-size:14px">O <b>${esc(o.club)}</b> quer <b>${esc(p.name)}</b> (${POSN[p.pos]} · força ${p.str} · ${p.age} anos) e oferece <b style="color:var(--ok)">${money(o.amount)}</b> · valor de mercado ${money(value(p))}.</span>
     ${note(euLoyal(p)?`${p.idol?'Ídolo da torcida':'Identificado com o clube'}: se recusar, ele fica feliz em ficar.`:p.cEnd-S.season>=3?'Contrato longo: se recusar, ele fica chateado (rende 5% menos até receber aumento), mas não força a saída.':p.euNo?'Ele já teve uma proposta recusada. Se recusar de novo, ele vai querer forçar a saída.':'Se recusar, ele fica insatisfeito: rende 5% menos até receber aumento.')}
@@ -996,9 +1049,9 @@ function newSeasonStructures(){
   const fo=shuffle(S.teams.filter(t=>t.foreign&&!t.world).map(t=>t.id));
   S.kg=[[],[],[],[]];br.forEach((id,i)=>S.kg[i%4].push(id));fo.forEach(id=>{let g=0;for(let i=1;i<4;i++)if(S.kg[i].length<S.kg[g].length)g=i;if(S.kg[g].length<4)S.kg[g].push(id)});
   S.kParts=S.kg.flat();S.kfix=S.kg.map(g=>roundRobin(g));S.ktab={};S.kParts.forEach(id=>S.ktab[id]=blank());
-  S.ko={ES:[],EF:[],KQ:[],KS:[],KF:[],M0:[],M1:[],DS:[],DF:[]};S.est={champ:S.states.map(()=>null)};S.kchamp=null;S.mchamp=null;S.kNext=null;
-  S.world=S.teams.filter(t=>t.world).map(t=>t.id);
-  S.cal=buildCalendar();S.md=0;S.over=false;S.last=[];S.newFormat=true;S.camp={};S.cg={};}
+  S.ko={ES:[],EF:[],KQ:[],KS:[],KF:[],M0:[],M1:[],DS:[],DF:[],US:[],UF:[]};S.est={champ:S.states.map(()=>null)};S.kchamp=null;S.mchamp=null;S.kNext=null;
+  S.world=S.teams.filter(t=>t.world&&!t.euro).map(t=>t.id);
+  S.cal=buildCalendar();S.md=0;S.over=false;S.last=[];S.newFormat=true;S.camp={};S.cg={};if(S.euro)euroSeason(0);}
 
 function newGameReal(){drawForeign(true);S.realFV1=true}
 function newGame(cfg){
@@ -1266,7 +1319,8 @@ function entryLabel(e){if(!e)return '';switch(e.t){
   case 'M0':return 'Mundial · semifinal';case 'M1':return 'Mundial · final'}return ''}
 function grpSort(ids,tab){return ids.slice().sort((x,y)=>{const a=tab[x],b=tab[y];return b.pts-a.pts||(b.gp-b.gc)-(a.gp-a.gc)||b.gp-a.gp||teamRating(T(y))-teamRating(T(x))})}
 function drawCup(s){const al=shuffle(S.cup.alive.slice());const pr=[];for(let i=0;i+1<al.length;i+=2){let h=al[i],a=al[i+1];if(T(a).div>T(h).div)[h,a]=[a,h];pr.push([h,a])}S.cup.next=pr;S.cup.nextStage=s}
-function pairsFor(e){if(!e)return [];switch(e.t){
+function pairsFor(e){return [...pairsForBR(e),...euroPairs(e)]}
+function pairsForBR(e){if(!e)return [];switch(e.t){
   case 'L':{if(!F2())return [0,1,2,3].flatMap(d=>S.fix[d][e.r].map(([h,a])=>({h,a,div:d})));
     const out=[0,1,2].flatMap(d=>S.fix[d][e.r].map(([h,a])=>({h,a,div:d})));
     if(e.r<14)S.dfix.forEach((fx,g)=>(fx[e.r]||[]).forEach(([h,a])=>out.push({h,a,div:3,grp:g})));
@@ -1281,7 +1335,7 @@ function pairsFor(e){if(!e)return [];switch(e.t){
   case 'KQ':{const s=S.kg.map(g=>grpSort(g,S.ktab));return [[0,1],[1,0],[2,3],[3,2]].map(([x,y])=>({h:s[x][0],a:s[y][1]}))}
   case 'KS':{const w=S.ko.KQ.map(x=>x.w);return [{h:w[0],a:w[1]},{h:w[2],a:w[3]}]}
   case 'KF':{const w=S.ko.KS.map(x=>x.w);return [{h:w[0],a:w[1],neutral:true}]}
-  case 'M0':{const W=S.world;return [{h:S.kchamp,a:W[0],neutral:true},{h:W[1],a:W[2],neutral:true}]}
+  case 'M0':{const W=mundW();return [{h:S.kchamp,a:W[0],neutral:true},{h:W[1],a:W[2],neutral:true}]}
   case 'M1':{const w=S.ko.M0.map(x=>x.w);return [{h:w[0],a:w[1],neutral:true}]}}return []}
 function buildMatches(){
   const e=currentEntry();return pairsFor(e).filter(p=>p.h!=null&&p.a!=null).map(p=>newMatch(p.h,p.a,p.comp||e.t,p.div??null,p))}
@@ -1526,6 +1580,10 @@ function finishMatchday(){applyFmt();
       {const ref=refPrice(th);if(th.price>ref)th.mood-=Math.min(6,(th.price/ref-1)*8);else if(th.price<=ref*.8)th.mood+=1}
       [[th,hg,ag],[ta,ag,hg]].forEach(([t,f,c])=>{const r=f>c?'V':f<c?'D':'E';t.mood+=(r==='V'?6:r==='E'?-1:-7)*(m.derby?1.8:1);t.hist.push(r);if(t.hist.length>5)t.hist.shift();
         t.fans=Math.round(t.fans*(r==='V'?1.012:r==='D'?.992:1));res[t.id]={r,comp:'L',f,c}});
+    }else if(m.comp==='EU'||m.comp==='UG'){
+      const tb=m.comp==='EU'?S.eutab:S.ucltab;const A=tb[th.id],B=tb[ta.id];if(A&&B){A.j++;B.j++;A.gp+=hg;A.gc+=ag;B.gp+=ag;B.gc+=hg;
+      if(hg>ag){A.v++;A.pts+=3;B.d++}else if(hg<ag){B.v++;B.pts+=3;A.d++}else{A.e++;B.e++;A.pts++;B.pts++}}
+      [[th,hg,ag],[ta,ag,hg]].forEach(([t,f,c])=>{res[t.id]={r:f>c?'V':f<c?'D':'E',comp:m.comp}});
     }else if(m.comp==='E'||m.comp==='K'){
       const tb=m.comp==='E'?S.etab:S.ktab;const A=tb[th.id],B=tb[ta.id];A.j++;B.j++;A.gp+=hg;A.gc+=ag;B.gp+=ag;B.gc+=hg;
       if(hg>ag){A.v++;A.pts+=3;B.d++}else if(hg<ag){B.v++;B.pts+=3;A.d++}else{A.e++;B.e++;A.pts++;B.pts++}
@@ -1539,11 +1597,11 @@ function finishMatchday(){applyFmt();
       const rec={h:th.id,a:ta.id,hg,ag,pens:m.pens,w,grp:m.grp};
       if(m.comp==='C'){credit(T(w),'cup',CUPPRIZE[e.s]);sponBonus(T(w),'bC',`passar de fase na Copa`);(S.cup.rounds[e.s]=S.cup.rounds[e.s]||[]).push(rec)}
       else{S.ko[m.comp].push(rec);
-        const pz={DS:[3e5,0,'prize'],DF:[8e5,4e5,'prize'],ES:[5e5,0,'est'],EF:[5e6,2e6,'est'],KQ:[6e6,0,'cont'],KS:[1e7,0,'cont'],KF:[3e7,1.5e7,'cont'],M0:[1e7,0,'mund'],M1:[7e7,3e7,'mund']}[m.comp];
+        const pz={DS:[3e5,0,'prize'],DF:[8e5,4e5,'prize'],ES:[5e5,0,'est'],EF:[5e6,2e6,'est'],KQ:[6e6,0,'cont'],KS:[1e7,0,'cont'],KF:[3e7,1.5e7,'cont'],M0:[1e7,0,'mund'],M1:[7e7,3e7,'mund'],US:[0,0,'cont'],UF:[0,0,'cont']}[m.comp];
         if(!T(w).foreign)credit(T(w),pz[2],pz[0]);if(pz[1]&&!T(l).foreign)credit(T(l),pz[2],pz[1]);
-        const title=m.comp==='DF'?'Série D':m.comp==='EF'?`${estTitle(m.grp)}`:m.comp==='KF'?'Copa Continental':m.comp==='M1'?'Mundial de Clubes':null;
+        const title=m.comp==='DF'?'Série D':m.comp==='EF'?`${estTitle(m.grp)}`:m.comp==='KF'?'Copa Continental':m.comp==='M1'?'Mundial de Clubes':m.comp==='UF'?'Liga dos Campeões':null;
         if(title){res[w].title=title;res[w].titleConf={EF:8,KF:15,M1:20,DF:10}[m.comp];
-          if(m.comp!=='DF')T(w).troph.push({n:title,s:S.season});if(m.comp==='EF'){S.est.champ[m.grp]=w;awardArt('E',m.grp);sponBonus(T(w),'bE','o título estadual')}if(m.comp==='KF'){S.kchamp=w;awardArt('K');sponBonus(T(w),'bK','o título continental')}if(m.comp==='M1')S.mchamp=w;
+          if(m.comp!=='DF')T(w).troph.push({n:title,s:S.season});if(m.comp==='EF'){S.est.champ[m.grp]=w;awardArt('E',m.grp);sponBonus(T(w),'bE','o título estadual')}if(m.comp==='KF'){S.kchamp=w;awardArt('K');sponBonus(T(w),'bK','o título continental')}if(m.comp==='M1')S.mchamp=w;if(m.comp==='UF')S.uclchamp=w;
           news(`${T(w).name} é campeão: ${title}!`);
           const mg=S.managers.find(x=>!x.out&&!x.fired&&x.team===w);if(mg){mg.titles.push(`${title} ${S.season}`);mg.rep=clamp((mg.rep??10)+({EF:4,KF:20,M1:25,DF:4}[m.comp]),0,100)}}}
     }
@@ -1747,6 +1805,7 @@ function endSeason(){
   if(F2()){const g=[0,1].map(standingsG);const il=[];for(let i=0;i<Math.max(g[0].length,g[1].length);i++){if(g[0][i])il.push(g[0][i]);if(g[1][i])il.push(g[1][i])}tables[3]=il;
     const fin=(S.ko.DF||[])[0];dChamp=fin?fin.w:il[0].id;dUp=fin?[fin.h,fin.a]:[g[0][0].id,g[1][0].id];dOut=[...g[0].slice(-2),...g[1].slice(-2)].map(t=>t.id)}
   if(S.cup.champ!=null)T(S.cup.champ).troph.push({n:'Copa Nacional',s:S.season});
+  euroEnd(sum);
   sum.art=[0,1,2,3].map(d=>awardArt('L',d)).filter(Boolean);
   {const top=tables[0].slice(0,4).map(t=>t.id);const c=S.cup.champ;S.kNext=c!=null&&!top.includes(c)?[...top,c]:tables[0].slice(0,5).map(t=>t.id)}
   tables.forEach((tb,d)=>{const ch=d===3&&dChamp!=null?T(dChamp):tb[0];sum.champs.push(ch.id);ch.troph.push({n:DIVN[d],s:S.season});const n=tb.length;
@@ -1853,7 +1912,7 @@ function endSeason(){
   S.managers.forEach(m=>{m.repS=0});
   {const pool=coachPool();while(pool.length<10){const c=makeCoach({div:ri(1,3)});c.last=null;pool.push(c)}}
   S.teams.forEach(t=>{if(!isHuman(t.id))t.price=refPrice(t)});
-  S.summary=sum;S.season++;payRecv();drawForeign(false);newSeasonStructures();refreshMarket();setGoals();euStarsArrive();S.managers.forEach(mg=>{if(mg.out||mg.fired||mg.team==null)return;const t=T(mg.team);t.dil=(t.dil||[]).filter(d=>d.k!=='focus'&&d.k!=='talk');t.focusAsk=S.season;t.dil.push(mkDil({k:'focus'}))});S.teams.forEach(t=>t.chem=Math.max(60,t.chem??70));
+  S.summary=sum;S.season++;payRecv();drawForeign(false);euStarsArrive();euroRefresh();newSeasonStructures();refreshMarket();setGoals();S.managers.forEach(mg=>{if(mg.out||mg.fired||mg.team==null)return;const t=T(mg.team);t.dil=(t.dil||[]).filter(d=>d.k!=='focus'&&d.k!=='talk');t.focusAsk=S.season;t.dil.push(mkDil({k:'focus'}))});S.teams.forEach(t=>t.chem=Math.max(60,t.chem??70));
   S.managers.forEach(mg=>{if(!mg.out&&!mg.fired)mg.offers.forEach(o=>news(`Proposta: o ${T(o.tid).name} quer contratar ${mg.name} para a nova temporada.`,[mg.team]))});
   const fi=S.managers.findIndex(m=>m.fired&&!m.out);if(fi>=0)UI.cur=fi;
   save()}
@@ -2605,7 +2664,7 @@ function renderElenco(){
 const fdots=x=>(x.hist||[]).length?`<span class="fdots" aria-label="Últimos jogos: ${(x.hist||[]).join(' ')}">${x.hist.map(r=>`<i class="fd f${r}"></i>`).join('')}</span>`:'';
 function renderTabela(){
   const t=myTeam();
-  const modes=`<div class="formgrid" role="group">${[['cal','Calendário'],['liga','Nacional'],['est','Estaduais'],['copa','Copa'],['cont','Continental'],['art','Artilharia'],['hist','Campeões'],['rank','Rankings']].map(([k,l])=>`<button class="chip" data-act="tmode" data-m="${k}" aria-pressed="${UI.tmode===k}">${l}</button>`).join('')}</div>`;
+  const modes=`<div class="formgrid" role="group">${[['cal','Calendário'],['liga','Nacional'],['est','Estaduais'],['copa','Copa'],['cont','Continental'],['euro','Europa'],['art','Artilharia'],['hist','Campeões'],['rank','Rankings']].map(([k,l])=>`<button class="chip" data-act="tmode" data-m="${k}" aria-pressed="${UI.tmode===k}">${l}</button>`).join('')}</div>`;
   const miniTab=(ids,tab,hl)=>`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th style="text-align:left">Clube</th><th>P</th><th>J</th><th>V</th><th>E</th><th>D</th><th>SG</th></tr></thead><tbody>${ids.map((id,i)=>{const r=tab[id];const x=T(id);return `<tr class="${isHuman(id)?'me':''}"><td>${i+1}</td><td class="team"><button class="linkbtn" data-act="teamView" data-tid="${id}">${crest(id,'sm')}<span>${esc(x.name)}${x.foreign?` <small class="muted">${x.country}</small>`:x.div===5?' <small class="muted">s/ div.</small>':''}</span></button></td><td class="pts" style="${i<hl?'color:var(--ok)':''}">${r.pts}</td><td>${r.j}</td><td>${r.v}</td><td>${r.e}</td><td>${r.d}</td><td>${r.gp-r.gc>0?'+':''}${r.gp-r.gc}</td></tr>`}).join('')}</tbody></table></div>`;
   const koList=(arr,title)=>arr&&arr.length?`<div><span class="label">${title}</span>${arr.map(x=>`<div class="mini ${isHuman(x.h)||isHuman(x.a)?'me':''}"><span class="h" style="${x.w===x.h?'':'opacity:.6'}"><span class="n">${esc(T(x.h).name)}</span>${crest(x.h,'sm')}</span><span class="sc">${x.hg}–${x.ag}</span><span class="a" style="${x.w===x.a?'':'opacity:.6'}">${crest(x.a,'sm')}<span class="n">${esc(T(x.a).name)}</span></span>${x.pens?`<span class="pen">pênaltis ${x.pens[0]}–${x.pens[1]}</span>`:''}</div>`).join('')}</div>`:'';
   let body='';
@@ -2629,6 +2688,17 @@ function renderTabela(){
      ${tb.map((x,i)=>{const r=S.tab[x.id];const z=d===0?(i===0?'ch':i<4?'k':i>=tb.length-2?'dn':''):(i<2?'up':i>=tb.length-2?'dn':'');
        return `<tr class="${isHuman(x.id)?'me':''}"><td class="zone ${z}"></td><td>${i+1}</td><td class="team"><button class="linkbtn" data-act="teamView" data-tid="${x.id}">${crest(x.id,'sm')}<span>${esc(x.name)}</span></button>${fdots(x)}</td><td class="pts">${r.pts}</td><td>${r.j}</td><td>${r.v}</td><td>${r.e}</td><td>${r.d}</td><td>${r.gp-r.gc>0?'+':''}${r.gp-r.gc}</td></tr>`}).join('')}
      </tbody></table></div><div class="zleg">${d===0?'<span><i class="zone ch"></i>Campeão</span><span><i class="zone k"></i>Continental</span>':'<span><i class="zone up"></i>Acesso</span>'}<span><i class="zone dn"></i>${d<3?'Rebaixamento':'Saem das divisões'}</span><span><i class="fd fV"></i><i class="fd fE"></i><i class="fd fD"></i>últimos jogos</span></div></div>`}
+  else if(UI.tmode==='euro'){
+    if(!S.euro||!S.eutab)body=`<div class="panel">${note('O Europão começa na próxima temporada.')}</div>`;
+    else{const ids=grpSort(S.euro.ids,S.eutab);const sc=Object.values(S.players).filter(p=>p.team!=null&&T(p.team)&&T(p.team).euro&&p.gs&&p.gs.L).sort((a,b)=>b.gs.L-a.gs.L).slice(0,5);
+      body=`<div class="panel"><div class="spread" style="margin-bottom:6px"><h3 style="font-size:22px">Europão</h3><span class="muted" style="font-size:13px">8 primeiros vão à Liga dos Campeões · 2 últimos saem</span></div>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th></th><th>#</th><th style="text-align:left">Clube</th><th>P</th><th>J</th><th>V</th><th>E</th><th>D</th><th>SG</th></tr></thead><tbody>
+      ${ids.map((id,i)=>{const r=S.eutab[id];const z=i===0?'ch':i<8?'k':i>=ids.length-2?'dn':'';return `<tr><td class="zone ${z}"></td><td>${i+1}</td><td class="team"><button class="linkbtn" data-act="teamView" data-tid="${id}">${crest(id,'sm')}<span>${esc(T(id).name)}</span></button></td><td class="pts">${r.pts}</td><td>${r.j}</td><td>${r.v}</td><td>${r.e}</td><td>${r.d}</td><td>${r.gp-r.gc>0?'+':''}${r.gp-r.gc}</td></tr>`}).join('')}
+      </tbody></table></div><div class="zleg"><span><i class="zone ch"></i>Campeão</span><span><i class="zone k"></i>Liga dos Campeões</span><span><i class="zone dn"></i>Saem do Europão</span></div></div>
+      ${S.uclOn&&S.uclg?`<div class="panel stack"><div class="spread"><h3 style="font-size:22px">Liga dos Campeões</h3><span class="muted" style="font-size:13px">${S.uclchamp!=null?'Campeão: '+esc(T(S.uclchamp).name):'2 por grupo vão à semifinal'}</span></div>
+        ${koList(S.ko.UF,'Final')}${koList(S.ko.US,'Semifinais')}${S.uclg.map((g,i)=>`<div><span class="label">Grupo ${'AB'[i]}</span>${miniTab(grpSort(g,S.ucltab),S.ucltab,2)}</div>`).join('')}
+        ${note('O campeão e o vice vão ao Mundial, no meio da temporada europeia.')}</div>`:''}
+      ${sc.length?`<div class="panel stack"><span class="label">Artilharia do Europão</span>${sc.map((p,i)=>`<div class="spread" style="font-size:14px"><span>${i+1}. <b>${esc(p.name)}</b> <span class="muted">${esc(T(p.team).short)}${p.br?' · ex-Brasil':''}</span></span><b>${p.gs.L}</b></div>`).join('')}</div>`:''}`}}
   else if(UI.tmode==='est'){
     if(!S.etab)body=`<div class="panel">${note('Os estaduais começam na próxima temporada.')}</div>`;
     else{const st=Math.min(UI.tst??(t?t.state:0)??0,S.states.length-1);const ids=grpSort(S.states[st],S.etab);
@@ -3226,9 +3296,11 @@ function evText(ev){const p=P(ev.pid);const n=p?esc(p.name):'—';
   if(ev.type==='r')return `<span class="sq r"></span> ${n} expulso`;
   if(ev.type==='inj')return `<span style="color:var(--danger);font-weight:700">+</span> ${n} lesionado`;
   if(ev.type==='sub')return `↔ Entra ${n}${ev.pid2&&P(ev.pid2)?', sai '+esc(P(ev.pid2).name):''}`;return ''}
-function liveGroups(){
-  const L=UI.live;const idx=L.ms.map((m,i)=>i);
-  const c0=L.ms[0]?.comp;
+function liveGroups(){const g=liveGroups0();const L=UI.live;if(UI.prefs.others!=='all')return g;const eu=L.ms.map((m,i)=>i).filter(i=>isEuC(L.ms[i].comp));if(!eu.length)return g;
+  const u=eu.filter(i=>L.ms[i].comp!=='EU'),l=eu.filter(i=>L.ms[i].comp==='EU');return [...g,...(l.length?[{title:'Europão',ids:l}]:[]),...(u.length?[{title:'Liga dos Campeões',ids:u}]:[])]}
+function liveGroups0(){
+  const L=UI.live;const idx=L.ms.map((m,i)=>i).filter(i=>!isEuC(L.ms[i].comp));
+  const c0=L.ms[idx[0]]?.comp;
   if(c0!=='L'){if(UI.prefs.others==='none')return [];const ids=UI.prefs.others==='mine'?idx.filter(i=>humanIn(L.ms[i])):idx;
     if((c0==='E'||c0==='ES'||c0==='EF'||c0==='K')){const gs=[...new Set(ids.map(i=>L.ms[i].grp))];return gs.map(g=>({title:c0==='K'?`Continental · Grupo ${'ABCD'[g]}`:`${estTitle(g)}`,ids:ids.filter(i=>L.ms[i].grp===g)}))}
     return [{title:L.cupName,ids}]}
@@ -3625,7 +3697,7 @@ const ACT={
   pfil(d){UI.pfil=d.v;render()},
   rkv(d){UI.rkv=d.v;render()},
   dilPick(d){const t=myTeam(),mg=me();const id=+d.id;const x=(t.dil||[]).find(q=>q.id===id);if(!x||!dilValid(t,x))return;t.dil=t.dil.filter(q=>q.id!==id);const msg=dilApply(t,mg,x,d.o);if(msg)news(msg,[t.id]);save();render();if(msg)toast(msg.length>90?'Decisão tomada.':msg)},
-  euYes(d){const t=myTeam();const o=(t.euOffers||[]).find(x=>x.pid===d.pid);const p=P(d.pid);if(!o||!p)return;UI.sheet=null;euSell(t,p,o.club,o.amount,false);save();render();toast('Venda concluída: '+money(o.amount))},
+  euYes(d){const t=myTeam();const o=(t.euOffers||[]).find(x=>x.pid===d.pid);const p=P(d.pid);if(!o||!p)return;UI.sheet=null;euSell(t,p,o.club,o.amount,false,o.tid);save();render();toast('Venda concluída: '+money(o.amount))},
   euNo(d){const t=myTeam();const p=P(d.pid);t.euOffers=(t.euOffers||[]).filter(x=>x.pid!==d.pid);if(p&&euLoyal(p)){news(`${p.name} recusa a Europa sem drama: ${p.idol?'ídolo da torcida':'identificado com o clube'}, quer ficar.`,[t.id]);save();render();return}
     if(p&&p.cEnd-S.season>=3){p.euUnhappy=1;news(`${p.name} fica chateado por não ser liberado, mas tem contrato longo e não vai forçar a saída.`,[t.id]);save();render();return}
     if(p){p.euNo=(p.euNo||0)+1;p.euUnhappy=1;if(p.euNo>=2){p.forceOut=1;news(`${p.name} não aceita a recusa e avisa que vai forçar a saída na próxima proposta.`,[t.id])}else news(`${p.name} fica chateado por não ser liberado ao futebol europeu.`,[t.id])}save();render()},
